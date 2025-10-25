@@ -1,0 +1,19 @@
+{
+  "name": "ep-aware-jobs",
+  "private": true,
+  "version": "0.1.0",
+  "scripts": {
+    "dev": "pnpm run -r --parallel dev --filter ep-aware-api --filter ep-aware-web",
+    "build": "pnpm run -r build --filter ep-aware-api --filter ep-aware-web",
+    "test": "pnpm run -r test --filter ep-aware-api --filter ep-aware-web",
+    "lint": "pnpm run -r lint --filter ep-aware-api --filter ep-aware-web"
+  },
+  "workspaces": [
+    "api",
+    "web"
+  ],
+  "engines": {
+    "node": ">=18",
+    "pnpm": ">=8"
+  }
+}
