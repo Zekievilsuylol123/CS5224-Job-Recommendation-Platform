@@ -4,10 +4,10 @@ import type { CompassScore } from '../types';
 const ACCEPTED = ['application/pdf', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'];
 const MAX_BYTES = 3 * 1024 * 1024;
 
-type Status = 'idle' | 'uploading' | 'analyzing' | 'result' | 'error';
+export type ResumeUploadStatus = 'idle' | 'uploading' | 'analyzing' | 'result' | 'error';
 
 interface Props {
-  status: Status;
+  status: ResumeUploadStatus;
   onSelect: (file: File) => void;
   error?: string;
   result?: CompassScore;

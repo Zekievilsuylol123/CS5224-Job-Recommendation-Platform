@@ -64,6 +64,29 @@ export interface ParsedProfile {
   gender?: string;
 }
 
+export interface EducationEntry {
+  id: string;
+  school: string;
+  degree: string;
+  fieldOfStudy?: string;
+  startDate: string;
+  endDate?: string;
+  currentlyStudying?: boolean;
+  description?: string;
+}
+
+export interface ExperienceEntry {
+  id: string;
+  title: string;
+  company: string;
+  employmentType?: string;
+  location?: string;
+  startDate: string;
+  endDate?: string;
+  currentlyWorking?: boolean;
+  description?: string;
+}
+
 export type ApplicationStatus = 'draft' | 'sent' | 'responded' | 'rejected' | 'interview';
 
 export interface Application {

@@ -1,6 +1,13 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
-import type { Application, ParsedProfile, PlanTier, User } from '../types';
+import type {
+  Application,
+  EducationEntry,
+  ExperienceEntry,
+  ParsedProfile,
+  PlanTier,
+  User
+} from '../types';
 
 export interface BasicInfo {
   name: string;
@@ -17,6 +24,8 @@ interface ProfileState {
   profile?: StoredProfile;
   parsedProfile?: ParsedProfile;
   applications: Application[];
+  education: EducationEntry[];
+  experiences: ExperienceEntry[];
   setBasicInfo: (info: Partial<BasicInfo>) => void;
   setProfile: (profile: StoredProfile) => void;
   mergeProfile: (profile: Partial<StoredProfile>) => void;
@@ -24,6 +33,8 @@ interface ProfileState {
   addApplication: (application: Application) => void;
   setApplications: (applications: Application[]) => void;
   resetApplications: () => void;
+  setEducation: (items: EducationEntry[]) => void;
+  setExperiences: (items: ExperienceEntry[]) => void;
 }
 
 const defaultBasicInfo: BasicInfo = {
@@ -37,6 +48,8 @@ export const useProfileStore = create<ProfileState>()(
     (set) => ({
       basicInfo: defaultBasicInfo,
       applications: [],
+      education: [],
+      experiences: [],
       setBasicInfo: (info) =>
         set((state) => ({
           basicInfo: { ...state.basicInfo, ...info }
@@ -65,7 +78,9 @@ export const useProfileStore = create<ProfileState>()(
           applications: [application, ...state.applications]
         })),
       setApplications: (applications) => set({ applications }),
-      resetApplications: () => set({ applications: [] })
+      resetApplications: () => set({ applications: [] }),
+      setEducation: (items) => set({ education: items }),
+      setExperiences: (items) => set({ experiences: items })
     }),
     {
       name: 'ep-aware-profile',
@@ -73,7 +88,9 @@ export const useProfileStore = create<ProfileState>()(
       partialize: (state) => ({
         basicInfo: state.basicInfo,
         profile: state.profile,
-        applications: state.applications
+        applications: state.applications,
+        education: state.education,
+        experiences: state.experiences
       })
     }
   )

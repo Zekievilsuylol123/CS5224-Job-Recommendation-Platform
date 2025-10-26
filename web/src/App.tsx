@@ -5,7 +5,8 @@ import DashboardPage from './pages/Dashboard';
 import JobsListPage from './pages/JobsList';
 import JobDetailPage from './pages/JobDetail';
 import ApplicationsPage from './pages/Applications';
-import { useProfileStore } from './store/profile';
+import ProfileMenu from './components/ProfileMenu';
+import ResumeUploadButton from './components/ResumeUploadButton';
 
 const navLinkClass = ({ isActive }: { isActive: boolean }): string =>
   [
@@ -14,8 +15,6 @@ const navLinkClass = ({ isActive }: { isActive: boolean }): string =>
   ].join(' ');
 
 export default function App(): JSX.Element {
-  const profile = useProfileStore((state) => state.profile);
-
   return (
     <div className="min-h-screen flex flex-col">
       <header className="border-b bg-white">
@@ -37,8 +36,9 @@ export default function App(): JSX.Element {
               Applications
             </NavLink>
           </nav>
-          <div className="hidden text-sm text-slate-500 sm:block">
-            {profile?.name ? `Welcome, ${profile.name}` : 'No profile saved'}
+          <div className="flex items-center gap-3">
+            <ResumeUploadButton />
+            <ProfileMenu />
           </div>
         </div>
       </header>
