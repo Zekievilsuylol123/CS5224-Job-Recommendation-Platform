@@ -30,31 +30,37 @@ describe('jobs ranking', () => {
     const resultLikely = scoreCompass({
       user: {
         educationLevel: 'Masters',
+        educationInstitution: 'National University of Singapore',
         plan: 'ultimate',
         skills: ['machine learning', 'python', 'statistics'],
         expectedSalarySGD: 9000,
         yearsExperience: 6
       },
       job: {
+        title: 'Machine Learning Engineer',
         salaryMinSGD: 8500,
         salaryMaxSGD: 11000,
         requirements: ['machine learning', 'python', '5+ years experience'],
-        employer: { size: 'MNC', diversityScore: 0.8 }
+        employer: { size: 'MNC', localHQ: true },
+        industry: 'Technology'
       }
     });
     const resultBorderline = scoreCompass({
       user: {
         educationLevel: 'Bachelors',
+        educationInstitution: 'Regional University',
         plan: 'standard',
-        skills: ['excel', 'forecasting'],
-        expectedSalarySGD: 8200,
+        skills: ['excel'],
+        expectedSalarySGD: 5800,
         yearsExperience: 2
       },
       job: {
-        salaryMinSGD: 6000,
-        salaryMaxSGD: 8000,
-        requirements: ['excel', 'forecasting', '3+ years experience'],
-        employer: { size: 'SME', diversityScore: 0.5 }
+        title: 'Financial Analyst',
+        salaryMinSGD: 6200,
+        salaryMaxSGD: 7800,
+        requirements: ['excel', 'forecasting', 'financial modeling', '4+ years experience'],
+        employer: { size: 'SME', localHQ: false },
+        industry: 'Finance'
       }
     });
     const resultUnlikely = scoreCompass({
@@ -62,23 +68,25 @@ describe('jobs ranking', () => {
         educationLevel: 'Diploma',
         plan: 'freemium',
         skills: ['figma'],
-        expectedSalarySGD: 12000,
+        expectedSalarySGD: 3200,
         yearsExperience: 1
       },
       job: {
-        salaryMinSGD: 5000,
-        salaryMaxSGD: 7000,
+        title: 'Product Designer',
+        salaryMinSGD: 6200,
+        salaryMaxSGD: 7800,
         requirements: ['roadmap planning', 'stakeholder management', '5+ years experience'],
-        employer: { size: 'Startup', diversityScore: 0.3 }
+        employer: { size: 'Startup', localHQ: false },
+        industry: 'Product'
       }
     });
 
-    expect(resultLikely.total).toBeGreaterThanOrEqual(70);
+    expect(resultLikely.total).toBeGreaterThanOrEqual(55);
     expect(resultLikely.verdict).toBe('Likely');
-    expect(resultBorderline.total).toBeGreaterThanOrEqual(50);
-    expect(resultBorderline.total).toBeLessThan(70);
+    expect(resultBorderline.total).toBeGreaterThanOrEqual(20);
+    expect(resultBorderline.total).toBeLessThan(55);
     expect(resultBorderline.verdict).toBe('Borderline');
-    expect(resultUnlikely.total).toBeLessThan(50);
+    expect(resultUnlikely.total).toBeLessThan(20);
     expect(resultUnlikely.verdict).toBe('Unlikely');
   });
 });

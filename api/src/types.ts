@@ -8,6 +8,8 @@ export interface User {
   gender?: string;
   nationality?: string;
   educationLevel: EducationLevel;
+  educationInstitution?: string;
+  certifications?: string[];
   yearsExperience?: number;
   skills: string[];
   expectedSalarySGD?: number;
@@ -44,8 +46,10 @@ export type CompassVerdict = 'Likely' | 'Borderline' | 'Unlikely';
 export interface CompassBreakdown {
   salary: number;
   qualifications: number;
-  employer: number;
   diversity: number;
+  support: number;
+  skills: number;
+  strategic: number;
 }
 
 export interface CompassScore {

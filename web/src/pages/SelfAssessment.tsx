@@ -16,7 +16,7 @@ const PLAN_OPTIONS: PlanTier[] = ['freemium', 'standard', 'pro', 'ultimate'];
 
 const emptyScore: CompassScore = {
   total: 0,
-  breakdown: { salary: 0, qualifications: 0, employer: 0, diversity: 0 },
+  breakdown: { salary: 0, qualifications: 0, diversity: 0, support: 0, skills: 0, strategic: 0 },
   verdict: 'Borderline',
   notes: []
 };

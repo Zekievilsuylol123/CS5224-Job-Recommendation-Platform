@@ -1,192 +1,200 @@
-import { AssessmentInput, CompassScore, CompassVerdict, EducationLevel, PlanTier } from './types.js';
+import { AssessmentInput, CompassScore, CompassVerdict } from './types.js';
 
-export const SALARY_WEIGHT = 40;
-export const QUALIFICATIONS_WEIGHT = 30;
-export const EMPLOYER_WEIGHT = 20;
-export const DIVERSITY_WEIGHT = 10;
-export const TOTAL_WEIGHT = SALARY_WEIGHT + QUALIFICATIONS_WEIGHT + EMPLOYER_WEIGHT + DIVERSITY_WEIGHT;
+const SALARY_MAX = 20;
+const QUALIFICATIONS_MAX = 20;
+const DIVERSITY_MAX = 20;
+const SUPPORT_MAX = 20;
+const SKILLS_BONUS_MAX = 20;
+const STRATEGIC_BONUS_MAX = 10;
+const TOTAL_MAX = SALARY_MAX + QUALIFICATIONS_MAX + DIVERSITY_MAX + SUPPORT_MAX + SKILLS_BONUS_MAX + STRATEGIC_BONUS_MAX;
 
-const EDUCATION_RANK: Record<EducationLevel, number> = {
-  Diploma: 1,
-  Bachelors: 2,
-  Masters: 3,
-  PhD: 4
+const PASS_THRESHOLD = 40;
+const BORDERLINE_THRESHOLD = 20;
+
+const EXPERIENCE_THRESHOLD_YEARS = 8;
+
+const SECTOR_SALARY_BENCHMARKS: Record<string, { early: number; experienced: number }> = {
+  technology: { early: 5600, experienced: 7200 },
+  finance: { early: 6000, experienced: 7600 },
+  'financial services': { early: 6000, experienced: 7600 },
+  product: { early: 5500, experienced: 7000 },
+  healthcare: { early: 5400, experienced: 6900 },
+  manufacturing: { early: 5300, experienced: 6800 },
+  logistics: { early: 5200, experienced: 6600 },
+  'professional services': { early: 5600, experienced: 7100 },
+  'advanced manufacturing': { early: 5600, experienced: 7200 },
+  energy: { early: 5700, experienced: 7300 }
 };
+const DEFAULT_BENCHMARK = { early: 5400, experienced: 6900 };
 
-const PLAN_MULTIPLIER: Record<PlanTier, number> = {
-  freemium: 0.9,
-  standard: 0.95,
-  pro: 1,
-  ultimate: 1.05
-};
+const TOP_TIER_INSTITUTIONS = new Set(
+  [
+    'national university of singapore',
+    'nanyang technological university',
+    'singapore management university',
+    'massachusetts institute of technology',
+    'stanford university',
+    'harvard university',
+    'university of cambridge',
+    'university of oxford',
+    'imperial college london',
+    'eth zurich',
+    'university of tokyo',
+    'university of melbourne',
+    'tsinghua university',
+    'peking university',
+    'london school of economics',
+    'university of chicago',
+    'california institute of technology',
+    'cornell university',
+    'university of hong kong',
+    'university of sydney'
+  ].map((name) => name.toLowerCase())
+);
+
+const PROFESSIONAL_CERTIFICATIONS = new Set(
+  [
+    'cfa',
+    'acca',
+    'cpa australia',
+    'frmp',
+    'cfa charterholder',
+    'bar admission',
+    'pe license',
+    'pmp',
+    'sie exam',
+    'smc registered doctor',
+    'singapore bar'
+  ].map((item) => item.toLowerCase())
+);
+
+const SHORTAGE_OCCUPATIONS = new Set(
+  [
+    'artificial intelligence engineer',
+    'ai engineer',
+    'machine learning engineer',
+    'data scientist',
+    'analytics engineer',
+    'cloud architect',
+    'cybersecurity specialist',
+    'software architect',
+    'semiconductor engineer',
+    'quantum engineer',
+    'robotics engineer',
+    'marine engineer',
+    'green finance specialist',
+    'biomedical engineer',
+    'precision engineering manager',
+    'renewable energy engineer'
+  ].map((name) => name.toLowerCase())
+);
 
 function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
 }
 
 function determineVerdict(score: number): CompassVerdict {
-  if (score >= 70) return 'Likely';
-  if (score >= 50) return 'Borderline';
+  if (score >= PASS_THRESHOLD) return 'Likely';
+  if (score >= BORDERLINE_THRESHOLD) return 'Borderline';
   return 'Unlikely';
 }
 
-function scoreSalary(userInput: AssessmentInput, notes: string[]): number {
-  const expected = userInput.user.expectedSalarySGD;
-  const min = userInput.job?.salaryMinSGD;
-  const max = userInput.job?.salaryMaxSGD;
+function normalise(text?: string): string | undefined {
+  return text?.trim().toLowerCase();
+}
 
-  if (!min && !max) {
-    notes.push('Salary data missing; assumed neutral fit.');
-    return SALARY_WEIGHT * 0.6;
+function resolveSectorBenchmark(industry?: string): { early: number; experienced: number } {
+  const key = normalise(industry);
+  if (!key) return DEFAULT_BENCHMARK;
+  const direct = SECTOR_SALARY_BENCHMARKS[key];
+  if (direct) return direct;
+
+  const matchedEntry = Object.entries(SECTOR_SALARY_BENCHMARKS).find(([sector]) => key.includes(sector));
+  return matchedEntry ? matchedEntry[1] : DEFAULT_BENCHMARK;
+}
+
+function scoreSalary(input: AssessmentInput, notes: string[]): number {
+  const expected = input.user.expectedSalarySGD;
+  if (!expected) {
+    notes.push('C1 Salary · Missing expected salary; treated as within benchmark (10 pts).');
+    return 10;
   }
 
-  if (expected === undefined) {
-    notes.push('Expected salary unknown; used job band midpoint.');
-    return SALARY_WEIGHT * 0.75;
+  const benchmark = resolveSectorBenchmark(input.job?.industry);
+  const years = input.user.yearsExperience ?? 0;
+  const band = years >= EXPERIENCE_THRESHOLD_YEARS ? benchmark.experienced : benchmark.early;
+  const ratio = expected / band;
+
+  if (ratio >= 1.0) {
+    notes.push(`C1 Salary · Meets or exceeds sector benchmark of $${band.toLocaleString()} (20 pts).`);
+    return SALARY_MAX;
+  }
+  if (ratio >= 0.9) {
+    notes.push(`C1 Salary · Within 10% of sector benchmark ($${band.toLocaleString()}) (10 pts).`);
+    return 10;
   }
 
-  const effectiveMax = max ?? min ?? expected;
-  const effectiveMin = min ?? effectiveMax;
-
-  if (expected >= effectiveMin && expected <= effectiveMax) {
-    notes.push('Expected salary fits within job band.');
-    return SALARY_WEIGHT;
-  }
-
-  if (expected < effectiveMin) {
-    notes.push('Expected salary below job minimum; negotiating room.');
-    const gapRatio = clamp((effectiveMin - expected) / effectiveMin, 0, 1);
-    return SALARY_WEIGHT * clamp(1 - gapRatio * 0.5, 0.5, 1);
-  }
-
-  notes.push('Expected salary exceeds job band; may need compromise.');
-  const overRatio = clamp((expected - effectiveMax) / effectiveMax, 0, 2);
-  return SALARY_WEIGHT * clamp(1 - overRatio, 0.1, 0.85);
+  notes.push('C1 Salary · Falls below the indicative benchmark (0 pts).');
+  return 0;
 }
 
 function scoreQualifications(input: AssessmentInput, notes: string[]): number {
-  const targetJob = input.job;
-  const skills = new Set((input.user.skills ?? []).map((s) => s.toLowerCase()));
-  const jobSkills = new Set((targetJob?.requirements ?? []).map((s) => s.toLowerCase()));
-  const intersection = [...skills].filter((skill) => jobSkills.has(skill));
-  const skillCoverage = jobSkills.size === 0 ? 0.7 : intersection.length / jobSkills.size;
+  const institution = normalise(input.user.educationInstitution);
+  const certifications = (input.user.certifications ?? []).map((item) => item.toLowerCase());
 
-  const userEducation = input.user.educationLevel;
-  const jobPref = inferEducationFromJob(targetJob?.requirements ?? []);
-  let educationScore = 0.6;
+  const hasTopTierInstitution = institution ? TOP_TIER_INSTITUTIONS.has(institution) : false;
+  const hasRecognisedCertification = certifications.some((cert) => PROFESSIONAL_CERTIFICATIONS.has(cert));
 
-  if (userEducation && jobPref) {
-    const delta = EDUCATION_RANK[userEducation] - EDUCATION_RANK[jobPref];
-    if (delta >= 0) {
-      educationScore = 1;
-      notes.push('Education level matches or exceeds requirement.');
-    } else {
-      educationScore = clamp(0.6 + 0.1 * delta, 0.3, 0.8);
-      notes.push('Education level slightly below preferred requirement.');
-    }
-  } else if (userEducation) {
-    educationScore = clamp(0.6 + EDUCATION_RANK[userEducation] * 0.1, 0.6, 0.95);
-    notes.push('Education level evaluated against typical expectations.');
-  } else {
-    notes.push('Education level missing; conservative score applied.');
-    educationScore = 0.5;
+  if (hasTopTierInstitution || hasRecognisedCertification) {
+    notes.push('C2 Qualifications · Degree or certification recognised within QS/global accreditation (20 pts).');
+    return QUALIFICATIONS_MAX;
   }
 
-  const experienceYears = input.user.yearsExperience ?? 0;
-  const jobYears = inferRequiredYears(targetJob?.description ?? '', targetJob?.requirements ?? []);
-  let experienceScore = jobYears === 0 ? clamp(experienceYears / 5, 0.4, 1) : clamp(experienceYears / jobYears, 0, 1.1);
-  experienceScore = clamp(experienceScore, 0.3, 1);
-
-  if (jobYears > 0) {
-    if (experienceYears >= jobYears) {
-      notes.push('Experience meets job expectations.');
-    } else {
-      notes.push('Experience years slightly below stated range.');
-    }
+  const level = input.user.educationLevel;
+  if (level === 'Masters' || level === 'PhD' || level === 'Bachelors') {
+    notes.push('C2 Qualifications · Degree recognised but outside QS top tier (10 pts).');
+    return 10;
   }
 
-  const blended = (educationScore * 0.4 + skillCoverage * 0.4 + experienceScore * 0.2) * QUALIFICATIONS_WEIGHT;
-  return clamp(blended, 0, QUALIFICATIONS_WEIGHT);
+  notes.push('C2 Qualifications · No recognised degree/certification detected (0 pts).');
+  return 0;
 }
 
-function scoreEmployer(input: AssessmentInput, notes: string[]): number {
-  const employer = input.job?.employer;
-  const userPlan = input.user.plan ?? 'freemium';
-  const planMultiplier = PLAN_MULTIPLIER[userPlan];
-
-  if (!employer) {
-    notes.push('Employer data missing; neutral employer score applied.');
-    return EMPLOYER_WEIGHT * 0.6 * planMultiplier;
-  }
-
-  let base = 0.5;
-
-  switch (employer.size) {
-    case 'MNC':
-      base = 0.9;
-      break;
-    case 'Gov':
-      base = 0.8;
-      break;
-    case 'Startup':
-      base = 0.7;
-      break;
-    case 'SME':
-      base = 0.65;
-      break;
-    default:
-      base = 0.6;
-  }
-
-  if (employer.localHQ) {
-    base += 0.05;
-  }
-
-  const score = EMPLOYER_WEIGHT * clamp(base * planMultiplier, 0.4, 1.05);
-
-  notes.push(`Employer fit evaluated for ${employer.size} organization.`);
-  return clamp(score, 0, EMPLOYER_WEIGHT);
+function scoreDiversity(notes: string[]): number {
+  notes.push('C3 Diversity · No employer mix data provided; applying conservative baseline (5 pts).');
+  return 5;
 }
 
-function scoreDiversity(input: AssessmentInput, notes: string[]): number {
-  const employer = input.job?.employer;
-  if (!employer?.diversityScore) {
-    notes.push('Diversity data unavailable; using baseline.');
-    return DIVERSITY_WEIGHT * 0.5;
-  }
-
-  const normalized = clamp(employer.diversityScore, 0, 1);
-  if (normalized >= 0.75) {
-    notes.push('Employer has strong inclusivity signals.');
-  } else if (normalized >= 0.5) {
-    notes.push('Employer shows moderate inclusivity.');
-  } else {
-    notes.push('Employer inclusivity appears limited.');
-  }
-  return DIVERSITY_WEIGHT * normalized;
+function scoreSupport(notes: string[]): number {
+  notes.push('C4 Support · Employer local PMET data unavailable; applying conservative baseline (5 pts).');
+  return 5;
 }
 
-function inferEducationFromJob(requirements: string[]): EducationLevel | undefined {
-  const joined = requirements.join(' ').toLowerCase();
-  if (joined.includes('phd')) return 'PhD';
-  if (joined.includes("master's") || joined.includes('masters')) return 'Masters';
-  if (joined.includes("bachelor's") || joined.includes('degree')) return 'Bachelors';
-  if (joined.includes('diploma')) return 'Diploma';
-  return undefined;
+function matchesShortageOccupation(job?: AssessmentInput['job']): boolean {
+  if (!job) return false;
+  const title = normalise(job.title);
+  if (title && [...SHORTAGE_OCCUPATIONS].some((occupation) => title.includes(occupation))) {
+    return true;
+  }
+
+  return (job.requirements ?? []).some((req) => {
+    const requirement = normalise(req);
+    return requirement ? [...SHORTAGE_OCCUPATIONS].some((occupation) => requirement.includes(occupation)) : false;
+  });
 }
 
-function inferRequiredYears(description: string, requirements: string[]): number {
-  const combined = `${description}\n${requirements.join('\n')}`;
-  const regex = /(\d+)\s*\+?\s*(?:years?|yrs?)/gi;
-  let maxYears = 0;
-  let match: RegExpExecArray | null;
-  while ((match = regex.exec(combined)) !== null) {
-    const value = Number.parseInt(match[1], 10);
-    if (!Number.isNaN(value)) {
-      maxYears = Math.max(maxYears, value);
-    }
+function scoreSkillsBonus(input: AssessmentInput, notes: string[]): number {
+  if (matchesShortageOccupation(input.job)) {
+    notes.push('C5 Skills Bonus · Role aligns with Shortage Occupation List (+20 pts).');
+    return SKILLS_BONUS_MAX;
   }
-  return maxYears;
+  notes.push('C5 Skills Bonus · Role not in published shortage list (+0 pts).');
+  return 0;
+}
+
+function scoreStrategicBonus(notes: string[]): number {
+  notes.push('C6 Strategic Bonus · No SEP participation data supplied (+0 pts).');
+  return 0;
 }
 
 export function scoreCompass(input: AssessmentInput): CompassScore {
@@ -194,20 +202,25 @@ export function scoreCompass(input: AssessmentInput): CompassScore {
 
   const salaryScore = scoreSalary(input, notes);
   const qualificationScore = scoreQualifications(input, notes);
-  const employerScore = scoreEmployer(input, notes);
-  const diversityScore = scoreDiversity(input, notes);
+  const diversityScore = scoreDiversity(notes);
+  const supportScore = scoreSupport(notes);
+  const skillsScore = scoreSkillsBonus(input, notes);
+  const strategicScore = scoreStrategicBonus(notes);
 
-  const totalRaw = salaryScore + qualificationScore + employerScore + diversityScore;
-  const total = Math.round(totalRaw);
-  const verdict = determineVerdict(total);
+  const totalRaw =
+    salaryScore + qualificationScore + diversityScore + supportScore + skillsScore + strategicScore;
+  const totalPercent = Math.round((totalRaw / TOTAL_MAX) * 100);
+  const verdict = determineVerdict(totalRaw);
 
   return {
-    total,
+    total: totalPercent,
     breakdown: {
-      salary: Math.round(salaryScore),
-      qualifications: Math.round(qualificationScore),
-      employer: Math.round(employerScore),
-      diversity: Math.round(diversityScore)
+      salary: salaryScore,
+      qualifications: qualificationScore,
+      diversity: diversityScore,
+      support: supportScore,
+      skills: skillsScore,
+      strategic: strategicScore
     },
     verdict,
     notes
