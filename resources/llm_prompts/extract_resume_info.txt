@@ -1,0 +1,1 @@
+Extract the profile of the applicant from the resume.

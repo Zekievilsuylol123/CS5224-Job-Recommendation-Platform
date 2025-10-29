@@ -1,6 +1,4 @@
-<<<<<<< HEAD
 # CS5224-Team-21
-=======
 # EP-Aware Jobs MVP
 
 Ultra-lean Employment Pass aware job recommender built with a React/Vite frontend (`/web`) and Express/TypeScript backend (`/api`). The system keeps all state in-process by default, provides optional JSON persistence behind a storage interface, and is ready to swap to cloud services later without touching the business logic.
@@ -102,4 +100,4 @@ Environment config lives in `web/.env.example`.
 - When running Docker locally, set `WEB_ORIGIN` (API) to the public URL the browser uses.
 
 Happy shipping! 🚢
->>>>>>> 62e860e (Initial EP-aware MVP)
+
