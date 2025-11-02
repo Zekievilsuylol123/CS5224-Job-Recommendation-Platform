@@ -7,6 +7,7 @@ import { logger } from './logger.js';
 import { createStorage, type StorageAdapter } from './storage.js';
 import { createRateLimiter } from './rateLimiter.js';
 import { analyzeResume, isAllowedResumeMime } from './resume/analyzer.js';
+import { extract_resume_info } from './resume/llm_analyzer.js';
 import { scoreCompass } from './scoreCompass.js';
 import type { AssessmentInput, PlanTier, User } from './types.js';
 
@@ -261,6 +262,37 @@ export async function buildServer(): Promise<express.Express> {
         const user = extractUser(parseProfileFromRequest(req));
         const { profile, score, tips } = await analyzeResume(req.file, { user, job: jobInput });
         res.json({ profile, score, tips });
+      } catch (error) {
+        next(error);
+      }
+    }
+  );
+
+  router.post(
+    '/resume/llm_analyze',
+    RESUME_RATE_LIMITER,
+    upload.single('file'),
+    async (req: Request, res: Response, next: NextFunction) => {
+      try {
+        if (!req.file) {
+          res.status(400).json({ error: 'missing_file', message: 'Resume file is required.' });
+          return;
+        }
+        if (!isAllowedResumeMime(req.file.mimetype)) {
+          res.status(400).json({ error: 'unsupported_type', message: 'Only PDF or DOCX resumes are supported.' });
+          return;
+        }
+
+        let jobInput: AssessmentInput['job'];
+        if (req.body?.jobId) {
+          const job = await storage.getJob(req.body.jobId);
+          if (job) {
+            jobInput = job;
+          }
+        }
+
+        const profile = await extract_resume_info(req.file);
+        res.json({ profile });
       } catch (error) {
         next(error);
       }

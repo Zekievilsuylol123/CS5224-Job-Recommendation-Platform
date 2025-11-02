@@ -2,6 +2,7 @@ import OpenAI from "openai";
 import fs from "node:fs";
 import { z } from "zod";
 import { zodTextFormat } from "openai/helpers/zod";
+import { toFile } from "openai/uploads";
 
 const client = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -30,13 +31,18 @@ export const ProfileSchema = z.object({
     )
 });
 
-export async function extract_resume_info(resume_path: string): Promise<string> {
+export async function extract_resume_info(resume: Express.Multer.File): Promise<string> {
+  const uploadable = await toFile(resume.buffer, resume.originalname, {
+    type: resume.mimetype,
+  });
+
   const pdf = await client.files.create({
-    file: fs.createReadStream(resume_path),
+    file: uploadable,
     purpose: "assistants"
   });
 
-  const prompt = fs.readFileSync("resources\\llm_prompts\\extract_resume_info.txt", "utf8");
+  // const prompt = fs.readFileSync("resources\\llm_prompts\\extract_resume_info.txt", "utf8");
+  const prompt = "Extract the profile of the applicant from the resume.";
   console.log(prompt);
 
   const res = await client.responses.create({
@@ -59,4 +65,4 @@ export async function extract_resume_info(resume_path: string): Promise<string> 
   return res.output_text;
 }
 
-extract_resume_info("resources\\sample_resumes\\graduate_cs.pdf");
+// extract_resume_info("resources\\sample_resumes\\graduate_cs.pdf");
