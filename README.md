@@ -5,13 +5,18 @@ Ultra-lean Employment Pass aware job recommender built with a React/Vite fronten
 
 ## Repository layout
 
-- `/api` – Express server, resume parsing, scoring, storage adapters, tests.
+- `/api` – Express server, resume parsing, scoring, storage adapters, tests. [📚 API Docs](./api/docs/)
 - `/web` – Vite + React app, Tailwind UI, Zustand profile store, tests.
 - `docker-compose.yml` – Runs both services with sensible defaults.
 
 ## Quick start
 
 > Requirements: Node 18+, pnpm 8+
+
+**📖 New to the project? Start here:**
+- **Backend Setup:** [API Quickstart Guide](./api/docs/QUICKSTART.md)
+- **API Reference:** [Complete API Documentation](./api/docs/API.md)
+- **Examples:** [API Usage Examples](./api/docs/EXAMPLES.md)
 
 ```bash
 pnpm install
@@ -65,15 +70,17 @@ Job Browsing
 
 ## Backend highlights (`/api`)
 
-- **Routing**: `GET /jobs`, `GET /jobs/:id`, `POST /assessments/compass`, `POST /resume/analyze`, `POST/GET /applications`, `GET /plans`, `GET /health`.
+**📚 Documentation:** [Quickstart](./api/docs/QUICKSTART.md) | [API Reference](./api/docs/API.md) | [Examples](./api/docs/EXAMPLES.md)
+
+- **Routing**: `GET /jobs`, `GET /jobs/:id`, `POST /assessments/compass`, `POST /resume/analyze`, `POST /resume/llm_analyze`, `POST/GET /applications`, `GET /plans`, `GET /health`.
 - **Scoring**: `scoreCompass.ts` exposes weights (`SALARY_WEIGHT`, etc.) and verdict thresholds for shared FE tests.
-- **Resume parsing**: pdf-parse & mammoth feed heuristics that infer education, skills, experience, salary, title. Files never persist; text is sanitised.
+- **Resume parsing**: pdf-parse & mammoth feed heuristics that infer education, skills, experience, salary, title. LLM-powered analysis available via OpenAI. Files never persist; text is sanitised.
 - **Storage**: `StorageAdapter` with `InMemoryStore` (default) and `FileStore` (env `ALLOW_FILE_STORE=true`). Seed generator (`seedJobs.ts`) produces 30 deterministic SG roles.
-- **Protection**: Token bucket rate limiting (10 resume analyses/IP/hour), file size/type guard (≤3 MB, PDF/DOCX).
+- **Protection**: Token bucket rate limiting (10 resume analyses/IP/hour), file size/type guard (≤3 MB, PDF/DOCX).
 - **Logging**: Pino logger, single error handler.
 - **Tests**: `scoreCompass`, `resume.analyze`, `jobs` cover verdict boundaries, parsing, and ranking.
 
-Environment variables live in `api/.env.example`.
+Environment variables live in `api/.env.example`. See [Quickstart Guide](./api/docs/QUICKSTART.md) for setup instructions.
 
 ## Frontend highlights (`/web`)
 
