@@ -18,10 +18,28 @@ Ultra-lean Employment Pass aware job recommender built with a React/Vite fronten
 - **API Reference:** [Complete API Documentation](./api/docs/API.md)
 - **Examples:** [API Usage Examples](./api/docs/EXAMPLES.md)
 
+### First-time setup
+
 ```bash
+# 1. Install dependencies
 pnpm install
+
+# 2. Configure backend API environment
+cd api
+cp .env.example .env
+# Edit .env and add your OPENAI_API_KEY
+
+# 3. Configure frontend to connect to backend
+cd ../web
+cp .env.example .env
+# Default VITE_API_URL=http://localhost:8080/api is correct for local development
+
+# 4. Return to root and start both services
+cd ..
 pnpm -w dev            # launches api (8080) and web (5173)
 ```
+
+**Important:** The frontend (port 5173) makes API calls to the backend (port 8080). The `VITE_API_URL` environment variable must be set in `web/.env` for this to work correctly.
 
 ### Testing
 
@@ -43,6 +61,12 @@ docker-compose up --build
 ```
 
 Frontend is served on <http://localhost:5173>, API on <http://localhost:8080>.
+
+**⚠️ Important:** Make sure both `api/.env` and `web/.env` are configured:
+- `api/.env` - Backend configuration (OpenAI API key, port, etc.)
+- `web/.env` - Frontend configuration (`VITE_API_URL=http://localhost:8080/api`)
+
+Without these files, the frontend won't be able to communicate with the backend API.
 
 ## Key flows (text diagrams)
 
@@ -102,7 +126,9 @@ Environment config lives in `web/.env.example`.
 
 ## Troubleshooting
 
-- Resume upload errors >3 MB or wrong MIME return friendly messages from both UI and API.
+- **Frontend can't connect to API:** Ensure `web/.env` exists with `VITE_API_URL=http://localhost:8080/api`. Restart the dev server after creating/modifying this file.
+- **Missing OpenAI API key:** Create `api/.env` and add `OPENAI_API_KEY=your-key-here` for LLM resume analysis to work.
+- Resume upload errors >3 MB or wrong MIME return friendly messages from both UI and API.
 - Rate limit (HTTP 429) surfaces as toast-friendly error via API response.
 - When running Docker locally, set `WEB_ORIGIN` (API) to the public URL the browser uses.
 

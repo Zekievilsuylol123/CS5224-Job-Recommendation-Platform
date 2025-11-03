@@ -94,6 +94,30 @@ Expected response:
 
 🎉 **Congratulations!** Your API is now running!
 
+### Step 6: Configure Frontend (If Using)
+
+If you're running the frontend web app, it needs to know where to find the API:
+
+```bash
+# Navigate to web directory
+cd ../web
+
+# Copy environment template
+cp .env.example .env
+
+# The default configuration is:
+# VITE_API_URL=http://localhost:8080/api
+```
+
+**Important:** The frontend runs on port **5173** but makes API calls to port **8080**. Without this configuration, the frontend will try to call APIs on the wrong port and fail.
+
+After creating `web/.env`, start the full application from the project root:
+
+```bash
+cd ..
+pnpm -w dev  # Starts both API and web app
+```
+
 ---
 
 ## 🔧 Environment Variables Reference
@@ -303,6 +327,13 @@ Add your frontend URL to `.env`:
 ```env
 WEB_ORIGIN=http://localhost:5173
 ```
+
+**Also check:** Make sure the frontend has `web/.env` configured with:
+```env
+VITE_API_URL=http://localhost:8080/api
+```
+
+If the frontend doesn't have this set, it will try to call APIs on the wrong port (5173 instead of 8080).
 
 ### File Upload Too Large
 
