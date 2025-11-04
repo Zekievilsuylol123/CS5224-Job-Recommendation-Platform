@@ -9,6 +9,7 @@ import { createRateLimiter } from './rateLimiter.js';
 import { analyzeResume, isAllowedResumeMime } from './resume/analyzer.js';
 import { extract_resume_info } from './resume/llm_analyzer.js';
 import { scoreCompass } from './scoreCompass.js';
+import { handleHRSearch } from './hrSearch.js';
 import type { AssessmentInput, PlanTier, User } from './types.js';
 
 const assessmentSchema = z.object({
@@ -307,6 +308,8 @@ export async function buildServer(): Promise<express.Express> {
       next(error);
     }
   });
+
+  router.post('/hr/search', handleHRSearch);
 
   app.use('/api', router);
   app.use(handleError);

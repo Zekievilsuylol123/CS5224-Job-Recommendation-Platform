@@ -17,6 +17,7 @@ All endpoints are prefixed with `/api`.
 - [Resume Analysis](#resume-analysis)
 - [Applications](#applications)
 - [Assessments](#assessments)
+- [HR Prospect Search](#hr-prospect-search)
 - [Error Responses](#error-responses)
 
 ---
@@ -532,6 +533,141 @@ curl -X POST http://localhost:8080/api/assessments/compass \
   }
 }
 ```
+
+---
+
+## HR Prospect Search
+
+### POST `/hr/search`
+
+Search for HR and recruiter contacts at a specific company. This endpoint queries an external prospect database to find HR professionals, talent acquisition specialists, and recruiters based in Singapore.
+
+**Request Body:**
+```json
+{
+  "company_domain": "okx.com",
+  "fetch_count": 2
+}
+```
+
+| Field           | Type   | Required | Description                                    |
+|----------------|--------|----------|------------------------------------------------|
+| company_domain | string | Yes      | Company website domain (e.g., "okx.com" or "https://okx.com/") |
+| fetch_count    | number | No       | Number of prospects to return (default: 2)     |
+
+**Request:**
+```bash
+curl -X POST http://localhost:8080/api/hr/search \
+  -H "Content-Type: application/json" \
+  -d '{
+    "company_domain": "okx.com",
+    "fetch_count": 2
+  }'
+```
+
+**Response:** `200 OK`
+```json
+{
+  "prospects": [
+    {
+      "first_name": "Jane",
+      "last_name": "Smith",
+      "full_name": "Jane Smith",
+      "email": "jane.smith@okx.com",
+      "personal_email": null,
+      "job_title": "Senior HR Manager",
+      "linkedin": "https://linkedin.com/in/janesmith",
+      "company_name": "OKX",
+      "company_domain": "okx.com",
+      "city": "Singapore",
+      "country": "Singapore"
+    },
+    {
+      "first_name": "John",
+      "last_name": "Tan",
+      "full_name": "John Tan",
+      "email": "john.tan@okx.com",
+      "personal_email": null,
+      "job_title": "Talent Acquisition Lead",
+      "linkedin": "https://linkedin.com/in/johntan",
+      "company_name": "OKX",
+      "company_domain": "okx.com",
+      "city": "Singapore",
+      "country": "Singapore"
+    }
+  ],
+  "company_domain": "okx.com",
+  "fetch_count": 2,
+  "file_name": "Prospects_2025-11-04T08-30-15",
+  "timestamp": "2025-11-04T08:30:15.123Z"
+}
+```
+
+**Response Fields:**
+
+| Field           | Type   | Description                                    |
+|----------------|--------|------------------------------------------------|
+| prospects      | array  | List of HR/recruiter contacts found            |
+| company_domain | string | Normalized company domain searched             |
+| fetch_count    | number | Number of prospects requested                  |
+| file_name      | string | Generated file name with timestamp             |
+| timestamp      | string | ISO 8601 timestamp of the search               |
+
+**Prospect Object (Essential Fields Only):**
+
+| Field           | Type          | Description                                  |
+|----------------|---------------|----------------------------------------------|
+| first_name     | string        | First name of the contact                    |
+| last_name      | string        | Last name of the contact                     |
+| full_name      | string        | Full name of the contact                     |
+| email          | string\|null  | Work email address (if available)            |
+| personal_email | string\|null  | Personal email address (if available)        |
+| job_title      | string        | Job title (e.g., "HR Manager")               |
+| linkedin       | string        | LinkedIn profile URL                         |
+| company_name   | string        | Company name                                 |
+| company_domain | string        | Company website domain                       |
+| city           | string        | City location                                |
+| country        | string        | Country location                             |
+
+**Search Criteria:**
+
+The search automatically filters for:
+- **Job Titles:** HR, Human Resource, Talent Acquisition, Recruiter
+- **Location:** Singapore
+- **Seniority Levels:** Senior, Entry, Manager
+- **Email Status:** Validated, Not Validated, Unknown
+
+**Error Responses:**
+
+`400 Bad Request` - Missing or invalid domain:
+```json
+{
+  "error": "invalid_request",
+  "message": "company_domain is required and must be a string"
+}
+```
+
+`400 Bad Request` - Invalid domain format:
+```json
+{
+  "error": "invalid_domain",
+  "message": "Invalid company domain format"
+}
+```
+
+`500 Internal Server Error` - External API error:
+```json
+{
+  "error": "unknown",
+  "message": "Failed to search HR prospects: [error details]"
+}
+```
+
+**Notes:**
+- Domain can be provided with or without protocol (`https://okx.com/` or `okx.com`)
+- The API automatically generates a timestamped file name for tracking
+- Prospects are filtered to Singapore-based HR roles only
+- Email availability depends on the prospect database
 
 ---
 
