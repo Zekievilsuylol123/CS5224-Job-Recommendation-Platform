@@ -101,3 +101,18 @@ export interface Application {
   createdAt: string;
   updatedAt: string;
 }
+
+export interface HRProspect {
+  first_name: string;
+  last_name: string;
+  full_name: string;
+  email: string | null;
+  personal_email: string | null;
+  job_title: string;
+  linkedin: string;
+  company_name: string;
+  company_domain: string;
+  city: string;
+  country: string;
+}
+

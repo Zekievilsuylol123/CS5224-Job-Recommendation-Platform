@@ -1,5 +1,5 @@
 import { useProfileStore } from '../store/profile';
-import type { Application, CompassScore, Job, ParsedProfile } from '../types';
+import type { Application, CompassScore, Job, ParsedProfile, HRProspect  } from '../types';
 
 const API_BASE = import.meta.env.VITE_API_URL ?? '/api';
 
@@ -106,3 +106,19 @@ export function fetchApplications(): Promise<{ items: Application[] }> {
 export function fetchPlans(): Promise<{ items: Array<{ id: string; label: string; price: number }>; gating: Record<string, boolean> }> {
   return apiFetch('/plans', { method: 'GET' });
 }
+
+export interface HRSearchResponse {
+  prospects: HRProspect[];
+  company_domain: string;
+  fetch_count: number;
+  file_name: string;
+  timestamp: string;
+}
+
+export function fetchHRProspects(companyDomain: string, fetchCount = 2): Promise<HRSearchResponse> {
+  return apiFetch('/hrsearch', {
+    method: 'POST',
+    body: JSON.stringify({ company_domain: companyDomain, fetch_count: fetchCount })
+  });
+}
+
