@@ -21,14 +21,17 @@ importers:
         specifier: ^17.2.3
         version: 17.2.3
       express:
-        specifier: ^4.19.2
+        specifier: ^4.21.2
         version: 4.21.2
       mammoth:
         specifier: ^1.6.0
         version: 1.11.0
       multer:
-        specifier: ^1.4.5-lts.1
+        specifier: 1.4.5-lts.2
         version: 1.4.5-lts.2
+      openai:
+        specifier: ^6.7.0
+        version: 6.7.0(zod@3.25.76)
       pdf-parse:
         specifier: ^1.1.1
         version: 1.1.2
@@ -39,7 +42,7 @@ importers:
         specifier: ^9.0.1
         version: 9.0.1
       zod:
-        specifier: ^3.23.8
+        specifier: ^3.25.76
         version: 3.25.76
     devDependencies:
       '@types/express':

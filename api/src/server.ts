@@ -7,10 +7,11 @@ import { logger } from './logger.js';
 import { createStorage, type StorageAdapter } from './storage.js';
 import { createRateLimiter } from './rateLimiter.js';
 import { analyzeResume, isAllowedResumeMime } from './resume/analyzer.js';
-import { extract_resume_info } from './resume/llm_analyzer.js';
+import { extract_resume_info, ProfileSchema } from './resume/llm_analyzer.js';
 import { scoreCompass } from './scoreCompass.js';
 import { handleHRSearch } from './hrSearch.js';
 import type { AssessmentInput, PlanTier, User } from './types.js';
+
 
 const assessmentSchema = z.object({
   user: z
@@ -237,37 +238,77 @@ export async function buildServer(): Promise<express.Express> {
     }
   });
 
-  router.post(
-    '/resume/analyze',
-    RESUME_RATE_LIMITER,
-    upload.single('file'),
-    async (req: Request, res: Response, next: NextFunction) => {
-      try {
-        if (!req.file) {
-          res.status(400).json({ error: 'missing_file', message: 'Resume file is required.' });
-          return;
-        }
-        if (!isAllowedResumeMime(req.file.mimetype)) {
-          res.status(400).json({ error: 'unsupported_type', message: 'Only PDF or DOCX resumes are supported.' });
-          return;
-        }
-
-        let jobInput: AssessmentInput['job'];
-        if (req.body?.jobId) {
-          const job = await storage.getJob(req.body.jobId);
-          if (job) {
-            jobInput = job;
-          }
-        }
-
-        const user = extractUser(parseProfileFromRequest(req));
-        const { profile, score, tips } = await analyzeResume(req.file, { user, job: jobInput });
-        res.json({ profile, score, tips });
-      } catch (error) {
-        next(error);
+router.post(
+  '/resume/analyze',
+  RESUME_RATE_LIMITER,
+  upload.single('file'),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      console.log("Resume analysing");
+      if (!req.file) {
+        res.status(400).json({ error: 'missing_file', message: 'Resume file is required.' });
+        return;
       }
+      if (!isAllowedResumeMime(req.file.mimetype)) {
+        res.status(400).json({ error: 'unsupported_type', message: 'Only PDF or DOCX resumes are supported.' });
+        return;
+      }
+
+      let jobInput: AssessmentInput['job'];
+      if (req.body?.jobId) {
+        const job = await storage.getJob(req.body.jobId);
+        if (job) jobInput = job;
+      }
+
+      // call LLM
+      const outputText = await extract_resume_info(req.file);
+
+      let parsed: any;
+      try {
+        parsed = JSON.parse(outputText);
+      } catch (parseError) {
+        console.error('JSON parse error:', parseError);
+        res.status(502).json({ 
+          error: 'llm_non_json', 
+          message: 'Failed to parse LLM response',
+          raw: outputText.slice(0, 300) 
+        });
+        return;
+      }
+
+      const node = parsed?.profile ?? parsed;
+      const safe = ProfileSchema.safeParse(node);
+      if (!safe.success) {
+        console.error('Schema validation failed:', safe.error);
+        res.status(422).json({ 
+          error: 'llm_invalid', 
+          message: 'Invalid profile structure',
+          issues: safe.error.issues 
+        });
+        return;
+      }
+
+      const profile = safe.data;
+
+      const user = extractUser(parseProfileFromRequest(req));
+      const score = scoreCompass({ user: profile, job: jobInput });
+
+      const tips: string[] = [];
+      if (!profile.skills?.length) {
+        tips.push('Add a dedicated "Skills" section with specific technologies.');
+      }
+      if (!profile.experience?.length) {
+        tips.push('Add work experience to strengthen your profile.');
+      }
+
+      res.json({ profile, score, tips });
+    } catch (error) {
+      console.error('Resume analysis error:', error);
+      next(error);
     }
-  );
+  }
+);
+
 
   router.post(
     '/resume/llm_analyze',
