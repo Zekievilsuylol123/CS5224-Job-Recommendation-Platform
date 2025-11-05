@@ -98,6 +98,11 @@ export default function JobDetailPage(): JSX.Element {
     }
   };
 
+  const handleContactHR = () => {
+    setStatus('success');
+    setStatusMessage('HR contact request sent (mock).');
+  };
+
   const currentScore = scoreOverride ?? data.score ?? 0;
   const currentVerdict = verdictOverride ?? data.epIndicator ?? 'Borderline';
 
@@ -140,13 +145,20 @@ export default function JobDetailPage(): JSX.Element {
           </div>
 
           <div className="rounded-3xl border border-slate-200 bg-white p-8 shadow-card">
-            <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+            <div className="flex flex-col gap-4 md:flex-row md:items-center md:gap-3">
               <button
                 type="button"
                 onClick={handleAssessFit}
                 className="rounded-lg bg-brand-600 px-5 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-brand-700"
               >
                 Assess fit with my profile
+              </button>
+              <button
+                type="button"
+                onClick={handleContactHR}
+                className="rounded-lg border border-slate-200 px-5 py-2 text-sm font-semibold text-slate-600 shadow-sm transition hover:border-slate-300 hover:bg-slate-50 hover:text-slate-700"
+              >
+                Contact HR
               </button>
               <button
                 type="button"
