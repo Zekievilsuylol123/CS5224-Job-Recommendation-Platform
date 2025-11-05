@@ -1,6 +1,6 @@
 import { Job } from './types.js';
 
-interface RoleTemplate {
+export interface RoleTemplate {
   title: string;
   industry: string;
   baseSalary: [number, number];

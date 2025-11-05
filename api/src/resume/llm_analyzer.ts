@@ -41,8 +41,7 @@ export async function extract_resume_info(resume: Express.Multer.File): Promise<
     purpose: "assistants"
   });
 
-  // const prompt = fs.readFileSync("resources\\llm_prompts\\extract_resume_info.txt", "utf8");
-  const prompt = "Extract the profile of the applicant from the resume.";
+  const prompt = fs.readFileSync("resources\\llm_prompts\\extract_resume_info.txt", "utf8");
   console.log(prompt);
 
   const res = await client.responses.create({
@@ -64,5 +63,3 @@ export async function extract_resume_info(resume: Express.Multer.File): Promise<
 
   return res.output_text;
 }
-
-// extract_resume_info("resources\\sample_resumes\\graduate_cs.pdf");
