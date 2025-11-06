@@ -14,6 +14,9 @@ importers:
 
   api:
     dependencies:
+      '@supabase/supabase-js':
+        specifier: ^2.79.0
+        version: 2.79.0
       cors:
         specifier: ^2.8.5
         version: 2.8.5

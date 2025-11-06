@@ -14,6 +14,13 @@ export interface User {
   skills: string[];
   expectedSalarySGD?: number;
   plan: PlanTier;
+  latestCompassScore?: {
+    total: number;
+    verdict: CompassVerdict;
+    breakdown: CompassBreakdown;
+    notes: string[];
+    calculatedAt?: string;
+  } | null;
 }
 
 export interface EmployerMeta {
@@ -61,6 +68,7 @@ export interface ParsedProfile {
   email?: string;
   skills: string[];
   educationLevel?: EducationLevel;
+  educationInstitution?: string;
   yearsExperience?: number;
   lastTitle?: string;
   expectedSalarySGD?: number;
@@ -91,13 +99,18 @@ export interface ExperienceEntry {
   description?: string;
 }
 
-export type ApplicationStatus = 'draft' | 'sent' | 'responded' | 'rejected' | 'interview';
+export type ApplicationStatus = 'draft' | 'sent' | 'responded' | 'rejected' | 'interview' | 'offer';
 
 export interface Application {
   id: string;
   userId: string;
   jobId: string;
+  jobTitle: string;
+  jobCompany: string;
+  jobUrl?: string;
   status: ApplicationStatus;
+  notes?: string;
+  appliedAt?: string;
   createdAt: string;
   updatedAt: string;
 }

@@ -1,5 +1,6 @@
 import OpenAI from "openai";
 import fs from "node:fs";
+import path from "node:path";
 import { z } from "zod";
 import { zodTextFormat } from "openai/helpers/zod";
 import { toFile } from "openai/uploads";
@@ -31,7 +32,9 @@ export const ProfileSchema = z.object({
     )
 });
 
-export async function extract_resume_info(resume: Express.Multer.File): Promise<string> {
+export type ParsedProfile = z.infer<typeof ProfileSchema>;
+
+export async function extract_resume_info(resume: Express.Multer.File): Promise<ParsedProfile> {
   const uploadable = await toFile(resume.buffer, resume.originalname, {
     type: resume.mimetype,
   });
@@ -41,7 +44,7 @@ export async function extract_resume_info(resume: Express.Multer.File): Promise<
     purpose: "assistants"
   });
 
-  const prompt = fs.readFileSync("resources\\llm_prompts\\extract_resume_info.txt", "utf8");
+  const prompt = fs.readFileSync(path.join("resources", "llm_prompts", "extract_resume_info.txt"), "utf8");
   console.log(prompt);
 
   const res = await client.responses.create({
@@ -61,5 +64,7 @@ export async function extract_resume_info(resume: Express.Multer.File): Promise<
   });
   console.log(res);
 
-  return res.output_text;
+  // Parse the JSON string returned by the LLM into an object
+  const parsedProfile = JSON.parse(res.output_text);
+  return parsedProfile;
 }

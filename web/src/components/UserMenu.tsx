@@ -19,12 +19,21 @@ export default function UserMenu(): JSX.Element {
   const menuRef = useRef<HTMLDivElement | null>(null);
   const { user, signOut } = useAuthStore();
   const profile = useProfileStore((state) => state.profile);
+  const basicInfo = useProfileStore((state) => state.basicInfo);
   const [menuOpen, setMenuOpen] = useState(false);
 
-  const displayName = user?.user_metadata?.full_name || profile?.name || 'User';
+  const displayName = user?.user_metadata?.full_name || profile?.name || basicInfo?.name || 'User';
   const email = user?.email || '';
   const avatarUrl = user?.user_metadata?.avatar_url;
   const avatarInitials = useMemo(() => initialsFor(displayName), [displayName]);
+  
+  // Profile details
+  const profileSubtitle = useMemo(() => {
+    const parts: string[] = [];
+    if (profile?.nationality) parts.push(profile.nationality);
+    if (profile?.yearsExperience != null) parts.push(`${profile.yearsExperience} yrs exp`);
+    return parts.length > 0 ? parts.join(' · ') : null;
+  }, [profile]);
 
   useEffect(() => {
     if (!menuOpen) return;
@@ -84,28 +93,54 @@ export default function UserMenu(): JSX.Element {
       </button>
 
       {menuOpen && (
-        <div className="absolute right-0 mt-2 w-72 origin-top-right rounded-lg border border-slate-200 bg-white shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none">
+        <div className="absolute right-0 mt-2 w-80 origin-top-right rounded-xl border border-slate-200 bg-white shadow-xl ring-1 ring-black ring-opacity-5 focus:outline-none z-50">
           <div className="p-4 border-b border-slate-100">
-            <div className="flex items-center gap-3">
+            <div className="flex items-start gap-3">
               {avatarUrl ? (
                 <img
                   src={avatarUrl}
                   alt={displayName}
-                  className="h-12 w-12 rounded-full object-cover"
+                  className="h-12 w-12 rounded-full object-cover flex-shrink-0"
                 />
               ) : (
-                <span className="flex h-12 w-12 items-center justify-center rounded-full bg-brand-100 text-lg font-semibold text-brand-700">
+                <span className="flex h-12 w-12 items-center justify-center rounded-full bg-brand-100 text-lg font-semibold text-brand-700 flex-shrink-0">
                   {avatarInitials}
                 </span>
               )}
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-slate-900 truncate">
+                <p className="text-sm font-semibold text-slate-900 truncate">
                   {displayName}
                 </p>
-                <p className="text-xs text-slate-500 truncate">{email}</p>
+                <p className="text-xs text-slate-500 truncate mt-0.5">{email}</p>
+                {profileSubtitle && (
+                  <p className="text-xs text-slate-600 mt-1">{profileSubtitle}</p>
+                )}
+                {profile?.educationLevel && (
+                  <div className="mt-2 inline-flex items-center rounded-full bg-brand-50 px-2 py-0.5 text-xs font-medium text-brand-700">
+                    {profile.educationLevel}
+                  </div>
+                )}
               </div>
             </div>
           </div>
+
+          {profile?.latestCompassScore && (
+            <div className="px-4 py-3 border-b border-slate-100 bg-slate-50">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs font-medium text-slate-500 uppercase tracking-wide">Latest COMPASS Score</p>
+                  <p className="text-lg font-bold text-slate-900 mt-1">{profile.latestCompassScore.total}/110</p>
+                </div>
+                <div className={`rounded-lg px-3 py-1 text-xs font-semibold ${
+                  profile.latestCompassScore.verdict === 'Likely' ? 'bg-green-100 text-green-700' :
+                  profile.latestCompassScore.verdict === 'Borderline' ? 'bg-yellow-100 text-yellow-700' :
+                  'bg-red-100 text-red-700'
+                }`}>
+                  {profile.latestCompassScore.verdict}
+                </div>
+              </div>
+            </div>
+          )}
 
           <div className="py-1">
             <button

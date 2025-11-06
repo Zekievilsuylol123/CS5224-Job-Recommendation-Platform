@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
+import { fetchProfile, saveProfile, type ProfileData } from '../api/client';
 import type {
   Application,
   EducationEntry,
@@ -26,6 +27,8 @@ interface ProfileState {
   applications: Application[];
   education: EducationEntry[];
   experiences: ExperienceEntry[];
+  isLoading: boolean;
+  error: string | null;
   setBasicInfo: (info: Partial<BasicInfo>) => void;
   setProfile: (profile: StoredProfile) => void;
   mergeProfile: (profile: Partial<StoredProfile>) => void;
@@ -35,6 +38,9 @@ interface ProfileState {
   resetApplications: () => void;
   setEducation: (items: EducationEntry[]) => void;
   setExperiences: (items: ExperienceEntry[]) => void;
+  // New methods for Supabase sync
+  loadProfileFromDB: () => Promise<void>;
+  saveProfileToDB: () => Promise<void>;
 }
 
 const defaultBasicInfo: BasicInfo = {
@@ -45,11 +51,13 @@ const defaultBasicInfo: BasicInfo = {
 
 export const useProfileStore = create<ProfileState>()(
   persist(
-    (set) => ({
+    (set, get) => ({
       basicInfo: defaultBasicInfo,
       applications: [],
       education: [],
       experiences: [],
+      isLoading: false,
+      error: null,
       setBasicInfo: (info) =>
         set((state) => ({
           basicInfo: { ...state.basicInfo, ...info }
@@ -80,7 +88,80 @@ export const useProfileStore = create<ProfileState>()(
       setApplications: (applications) => set({ applications }),
       resetApplications: () => set({ applications: [] }),
       setEducation: (items) => set({ education: items }),
-      setExperiences: (items) => set({ experiences: items })
+      setExperiences: (items) => set({ experiences: items }),
+
+      // Load profile from Supabase
+      loadProfileFromDB: async () => {
+        set({ isLoading: true, error: null });
+        try {
+          const profileData = await fetchProfile();
+          if (profileData) {
+            set({
+              profile: {
+                id: profileData.id,
+                name: profileData.name,
+                gender: profileData.gender,
+                nationality: profileData.nationality,
+                educationLevel: profileData.educationLevel,
+                educationInstitution: profileData.educationInstitution,
+                certifications: profileData.certifications,
+                yearsExperience: profileData.yearsExperience,
+                skills: profileData.skills || [],
+                expectedSalarySGD: profileData.expectedSalarySGD,
+                plan: profileData.plan || 'freemium',
+                latestCompassScore: profileData.latestCompassScore || null
+              },
+              isLoading: false
+            });
+          } else {
+            set({ isLoading: false });
+          }
+        } catch (error) {
+          set({ 
+            error: error instanceof Error ? error.message : 'Failed to load profile',
+            isLoading: false
+          });
+        }
+      },
+
+      // Save profile to Supabase
+      saveProfileToDB: async () => {
+        const { profile } = get();
+        if (!profile) {
+          set({ error: 'No profile to save' });
+          return;
+        }
+
+        set({ isLoading: true, error: null });
+        try {
+          const savedProfile = await saveProfile({
+            name: profile.name,
+            gender: profile.gender,
+            nationality: profile.nationality,
+            educationLevel: profile.educationLevel,
+            educationInstitution: profile.educationInstitution,
+            certifications: profile.certifications,
+            yearsExperience: profile.yearsExperience,
+            skills: profile.skills,
+            expectedSalarySGD: profile.expectedSalarySGD,
+            plan: profile.plan
+          });
+
+          set({
+            profile: {
+              ...profile,
+              id: savedProfile.id,
+              ...savedProfile
+            },
+            isLoading: false
+          });
+        } catch (error) {
+          set({
+            error: error instanceof Error ? error.message : 'Failed to save profile',
+            isLoading: false
+          });
+        }
+      }
     }),
     {
       name: 'ep-aware-profile',
