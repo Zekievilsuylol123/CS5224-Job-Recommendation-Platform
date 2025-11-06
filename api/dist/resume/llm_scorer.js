@@ -1,24 +1,13 @@
 import OpenAI from "openai";
 import fs from "node:fs";
-import path from "node:path";
 import { z } from "zod";
 import { zodTextFormat } from "openai/helpers/zod";
 import { toFile } from "openai/uploads";
-import { RoleTemplate } from "src/seedJobs";
-
 const client = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
+    apiKey: process.env.OPENAI_API_KEY,
 });
-
-const system_prompt = fs.readFileSync(
-  new URL("../../resources/llm_prompts/profile_jd_score_system.txt", import.meta.url),
-  "utf8"
-);
-var user_prompt = fs.readFileSync(
-  new URL("../../resources/llm_prompts/profile_jd_score_user.txt", import.meta.url),
-  "utf8"
-);
-
+const system_prompt = fs.readFileSync(new URL("../../resources/llm_prompts/profile_jd_score_system.txt", import.meta.url), "utf8");
+var user_prompt = fs.readFileSync(new URL("../../resources/llm_prompts/profile_jd_score_user.txt", import.meta.url), "utf8");
 export const ProfileSchema = z.object({
     candidate_name: z.string(),
     candidate_email: z.string().email(),
@@ -49,9 +38,7 @@ export const ProfileSchema = z.object({
     recommendations_to_candidate: z.array(z.string(), { message: "most impactful improvements for resume or prep" }),
     notes: z.string({ message: "short free-text if anything non-standard" })
 });
-
-export async function get_score(resume: Express.Multer.File, role: RoleTemplate): Promise<string> {
-
+export async function get_score(resume, role) {
     // update prompt
     user_prompt = user_prompt.replace("{{ role_title }}", role.title);
     user_prompt = user_prompt.replace("{{ industry }}", role.industry);
@@ -59,16 +46,13 @@ export async function get_score(resume: Express.Multer.File, role: RoleTemplate)
     user_prompt = user_prompt.replace("{{ job_requirements }}", role.requirements.join("\n"));
     user_prompt = user_prompt.replace("{{ job_description }}", role.description);
     console.log(user_prompt);
-
     const uploadable = await toFile(resume.buffer, resume.originalname, {
         type: resume.mimetype,
     });
-
     const pdf = await client.files.create({
         file: uploadable,
         purpose: "assistants"
     });
-
     const res = await client.responses.create({
         model: "gpt-4.1-mini",
         input: [
@@ -87,10 +71,9 @@ export async function get_score(resume: Express.Multer.File, role: RoleTemplate)
             }
         ],
         text: {
-          format: zodTextFormat(ProfileSchema as any, "profile"),
+            format: zodTextFormat(ProfileSchema, "profile"),
         },
     });
     console.log(res);
-
     return res.output_text;
 }

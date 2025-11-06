@@ -3,3 +3,4 @@ api/node_modules/*
 web/node_modules/*
 .DS_Store
 .env
+api/.env
