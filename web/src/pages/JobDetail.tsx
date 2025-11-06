@@ -704,8 +704,9 @@ export default function JobDetailPage(): JSX.Element {
         )}
       </Modal>
 
-      <div className="flex flex-col gap-10 lg:flex-row">
-        <div className="flex-1 space-y-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Main Content - Takes 2 columns on desktop */}
+        <div className="lg:col-span-2 space-y-6">
           <div className="rounded-3xl border border-slate-200 bg-white p-8 shadow-card">
             <div className="flex flex-wrap items-start justify-between gap-4">
               <div>
@@ -766,7 +767,7 @@ export default function JobDetailPage(): JSX.Element {
                 type="button"
                 onClick={handleOpenExternalLink}
                 disabled={hasApplied}
-                className="inline-flex items-center rounded-lg border border-brand-200 px-5 py-2 text-sm font-semibold text-brand-600 hover:border-brand-400 hover:text-brand-700 disabled:opacity-60 disabled:cursor-not-allowed"
+                className="inline-flex items-center justify-center rounded-lg border border-brand-200 px-5 py-2 text-sm font-semibold text-brand-600 hover:border-brand-400 hover:text-brand-700 disabled:opacity-60 disabled:cursor-not-allowed"
               >
                 {hasApplied ? (
                   <>
@@ -812,26 +813,25 @@ export default function JobDetailPage(): JSX.Element {
           </div>
         </div>
         
-        {/* Full Width Profile Snapshot and Assessment Report */}
-        <div className="w-full space-y-6">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* Profile Snapshot - Full Width on Mobile, Half on Desktop */}
-            <div className="space-y-6">
-              <ProfileChips profile={profile} title="Your Profile Snapshot" />
-              {data && !assessmentReport && (
-                <div className="rounded-2xl border border-slate-200 bg-white p-5">
-                  <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Keep improving</h3>
-                  <ul className="mt-3 space-y-2 text-sm text-slate-600">
-                    <li>- Update your profile after tweaking your resume.</li>
-                    <li>- Save tips and integrate them before re-assessment.</li>
-                    <li>- Track mock applications from the top navigation.</li>
-                  </ul>
-                </div>
-              )}
+        {/* Sidebar - Profile & Assessment - Takes 1 column on desktop */}
+        <div className="lg:col-span-1 space-y-6">
+          {/* Profile Snapshot */}
+          <ProfileChips profile={profile} title="Your Profile Snapshot" />
+          
+          {/* Tips Card - Only shows when no assessment */}
+          {data && !assessmentReport && (
+            <div className="rounded-2xl border border-slate-200 bg-white p-5">
+              <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Keep improving</h3>
+              <ul className="mt-3 space-y-2 text-sm text-slate-600">
+                <li>- Update your profile after tweaking your resume.</li>
+                <li>- Save tips and integrate them before re-assessment.</li>
+                <li>- Track mock applications from the top navigation.</li>
+              </ul>
             </div>
-            
-            {/* Assessment Report Summary - Shows beside profile when available */}
-            {assessmentReport && (
+          )}
+          
+          {/* Assessment Report Summary - Shows when available */}
+          {assessmentReport && (
               <div className="rounded-2xl border border-brand-200 bg-gradient-to-br from-brand-50 to-blue-50 p-6">
                 <div className="flex items-center justify-between mb-4">
                   <h3 className="text-sm font-semibold uppercase tracking-wide text-brand-700">
@@ -920,7 +920,6 @@ export default function JobDetailPage(): JSX.Element {
                 </div>
               </div>
             )}
-          </div>
         </div>
       </div>
     </div>
