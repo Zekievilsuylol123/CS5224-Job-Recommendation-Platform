@@ -1,6 +1,9 @@
 import { Link } from 'react-router-dom';
+import { useAuthStore } from '../store/auth';
 
 export default function LandingPage(): JSX.Element {
+  const { user } = useAuthStore();
+
   return (
     <section className="mx-auto flex max-w-6xl flex-col gap-10 px-6 py-16 md:flex-row md:items-center">
       <div className="flex-1">
@@ -13,18 +16,37 @@ export default function LandingPage(): JSX.Element {
           likely to sponsor you in Singapore.
         </p>
         <div className="mt-8 flex flex-wrap gap-4">
-          <Link
-            to="/assessment"
-            className="rounded-lg bg-brand-600 px-6 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-brand-700"
-          >
-            Start Self-Assessment
-          </Link>
-          <Link
-            to="/jobs"
-            className="rounded-lg border border-slate-300 px-6 py-3 text-sm font-semibold text-slate-700 hover:border-brand-300 hover:text-brand-600"
-          >
-            Browse EP-friendly Jobs
-          </Link>
+          {user ? (
+            <>
+              <Link
+                to="/dashboard"
+                className="rounded-lg bg-brand-600 px-6 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-brand-700"
+              >
+                Go to Dashboard
+              </Link>
+              <Link
+                to="/jobs"
+                className="rounded-lg border border-slate-300 px-6 py-3 text-sm font-semibold text-slate-700 hover:border-brand-300 hover:text-brand-600"
+              >
+                Browse EP-friendly Jobs
+              </Link>
+            </>
+          ) : (
+            <>
+              <Link
+                to="/login"
+                className="rounded-lg bg-brand-600 px-6 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-brand-700"
+              >
+                Get Started
+              </Link>
+              <Link
+                to="/login"
+                className="rounded-lg border border-slate-300 px-6 py-3 text-sm font-semibold text-slate-700 hover:border-brand-300 hover:text-brand-600"
+              >
+                Sign In
+              </Link>
+            </>
+          )}
         </div>
       </div>
       <div className="flex-1 rounded-3xl border border-brand-100 bg-brand-50 p-8 shadow-inner">
