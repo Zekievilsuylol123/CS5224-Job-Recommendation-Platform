@@ -8,6 +8,8 @@ import { createStorage, type StorageAdapter } from './storage.js';
 import { createRateLimiter } from './rateLimiter.js';
 import { analyzeResume, isAllowedResumeMime } from './resume/analyzer.js';
 import { extract_resume_info } from './resume/llm_analyzer.js';
+import { get_score } from './resume/llm_scorer.js';
+import type { RoleTemplate } from './seedJobs.js';
 import { scoreCompass } from './scoreCompass.js';
 import { handleHRSearch } from './hrSearch.js';
 import type { AssessmentInput, PlanTier, User } from './types.js';
@@ -292,8 +294,25 @@ export async function buildServer(): Promise<express.Express> {
           }
         }
 
-        const profile = await extract_resume_info(req.file);
-        res.json({ profile });
+        // const profile = await extract_resume_info(req.file);
+        // res.json({ profile });
+
+        // TODO: replace this with actual job role from request
+        const role_template: RoleTemplate = {
+          title: 'Software Engineer',
+          industry: 'Technology',
+          baseSalary: [6000, 9500],
+          requirements: [
+            'bachelor\'s degree',
+            'typescript',
+            'react',
+            'node.js',
+            '3+ years experience'
+          ],
+          description: 'Design and build cloud-native services with TypeScript and React.'
+        };
+        const profile_and_analysis = get_score(req.file, role_template);
+        res.json({ profile_and_analysis });
       } catch (error) {
         next(error);
       }

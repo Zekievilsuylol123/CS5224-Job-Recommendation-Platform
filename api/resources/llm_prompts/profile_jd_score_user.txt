@@ -1,0 +1,9 @@
+ROLE_TITLE: {{ role_title }}
+INDUSTRY: {{ industry }}
+BASE_SALARY: {{ base_salary }}
+
+JOB_REQUIREMENTS:
+{{ job_requirements }}
+
+JOB_DESCRIPTION:
+{{ job_description }}
