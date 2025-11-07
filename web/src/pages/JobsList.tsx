@@ -2,25 +2,20 @@ import { useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import JobCard from '../components/JobCard';
 import EmptyState from '../components/EmptyState';
+import MultiSelectDropdown from '../components/MultiSelectDropdown';
 import { useJobs } from '../hooks/useJobs';
 import { fetchJobFilters } from '../api/client';
 
 interface Filters {
   search: string;
-  location: string;
-  industry: string;
-  minSalary: string;
-  tags: string;
-  company: string;
+  tags: string[];
+  company: string[];
 }
 
 const defaultFilters: Filters = {
   search: '',
-  location: '',
-  industry: '',
-  minSalary: '',
-  tags: '',
-  company: ''
+  tags: [],
+  company: []
 };
 
 const PAGE_SIZE = 50;
@@ -38,11 +33,8 @@ export default function JobsListPage(): JSX.Element {
   
   const { data, isLoading } = useJobs({
     search: appliedFilters.search,
-    location: appliedFilters.location,
-    industry: appliedFilters.industry,
-    minSalary: appliedFilters.minSalary ? Number.parseInt(appliedFilters.minSalary, 10) : undefined,
-    tags: appliedFilters.tags,
-    company: appliedFilters.company,
+    tags: appliedFilters.tags.join(','),
+    company: appliedFilters.company.join(','),
     page: currentPage,
     pageSize: PAGE_SIZE
   });
@@ -77,9 +69,9 @@ export default function JobsListPage(): JSX.Element {
       </div>
       <form
         onSubmit={handleSubmit}
-        className="grid gap-4 rounded-2xl border border-slate-200 bg-white p-6 shadow-card md:grid-cols-4"
+        className="grid gap-4 rounded-2xl border border-slate-200 bg-white p-6 shadow-card md:grid-cols-3"
       >
-        <div className="md:col-span-2">
+        <div className="md:col-span-1">
           <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500">Search</label>
           <input
             type="text"
@@ -89,73 +81,24 @@ export default function JobsListPage(): JSX.Element {
             className="mt-2 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
           />
         </div>
-        <div>
-          <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500">Company</label>
-          <select
-            value={filters.company}
-            onChange={(event) => setFilters((prev) => ({ ...prev, company: event.target.value }))}
-            className="mt-2 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-          >
-            <option value="">All companies</option>
-            {filterMetadata?.companies.map((company) => (
-              <option key={company} value={company}>
-                {company}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div>
-          <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500">Tags</label>
-          <select
-            value={filters.tags}
-            onChange={(event) => setFilters((prev) => ({ ...prev, tags: event.target.value }))}
-            className="mt-2 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-          >
-            <option value="">All tags</option>
-            {filterMetadata?.tags.map((tag) => (
-              <option key={tag} value={tag}>
-                {tag}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div>
-          <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500">Location</label>
-          <select
-            value={filters.location}
-            onChange={(event) => setFilters((prev) => ({ ...prev, location: event.target.value }))}
-            className="mt-2 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-          >
-            <option value="">Any</option>
-            <option value="Singapore">Singapore</option>
-            <option value="Remote - Singapore">Remote - Singapore</option>
-            <option value="Singapore (Hybrid)">Singapore (Hybrid)</option>
-          </select>
-        </div>
-        <div>
-          <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500">Industry</label>
-          <select
-            value={filters.industry}
-            onChange={(event) => setFilters((prev) => ({ ...prev, industry: event.target.value }))}
-            className="mt-2 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-          >
-            <option value="">All</option>
-            <option value="Technology">Technology</option>
-            <option value="Product">Product</option>
-            <option value="Finance">Finance</option>
-          </select>
-        </div>
-        <div>
-          <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500">Min Salary (SGD)</label>
-          <input
-            type="number"
-            min={0}
-            value={filters.minSalary}
-            onChange={(event) => setFilters((prev) => ({ ...prev, minSalary: event.target.value }))}
-            className="mt-2 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-          />
-        </div>
-        <div className="flex items-end gap-3 md:col-span-2">
+        
+        <MultiSelectDropdown
+          label="Company"
+          options={filterMetadata?.companies || []}
+          selected={filters.company}
+          onChange={(selected) => setFilters((prev) => ({ ...prev, company: selected }))}
+          placeholder="All companies"
+        />
+        
+        <MultiSelectDropdown
+          label="Tags"
+          options={filterMetadata?.tags || []}
+          selected={filters.tags}
+          onChange={(selected) => setFilters((prev) => ({ ...prev, tags: selected }))}
+          placeholder="All tags"
+        />
+        
+        <div className="flex items-end gap-3 md:col-span-3">
           <button
             type="submit"
             className="inline-flex items-center rounded-lg bg-brand-600 px-5 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-brand-700"
@@ -165,7 +108,7 @@ export default function JobsListPage(): JSX.Element {
           <button
             type="button"
             onClick={handleReset}
-            className="text-sm font-medium text-slate-500 hover:text-brand-600"
+            className="inline-flex items-center rounded-lg border border-slate-300 bg-white px-5 py-2 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-50"
           >
             Reset
           </button>

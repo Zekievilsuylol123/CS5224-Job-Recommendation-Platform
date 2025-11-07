@@ -100,10 +100,14 @@ export interface JobDetailResponse {
   employer: EmployerMeta;
   createdAt: string;
   url?: string;
+  applyUrl?: string;
   score: number;
   epIndicator: string;
   rationale: string[];
   breakdown?: CompassBreakdown;
+  isInternSG?: boolean;
+  hrName?: string;
+  source?: string;
 }
 
 export interface JobFiltersMetadata {
@@ -217,7 +221,14 @@ export interface JobAnalysisResponse {
   questions_for_interview: string[];
   recommendations_to_candidate: string[];
   notes: string;
+  compass_score?: CompassScore; // Recalculated COMPASS score based on detailed JD
   from_cache?: boolean;
+}
+
+export function fetchExistingAssessment(jobId: string): Promise<JobAnalysisResponse> {
+  return apiFetch(`/jobs/${jobId}/assessment`, {
+    method: 'GET'
+  });
 }
 
 export function analyzeJobFit(jobId: string, regenerate = false): Promise<JobAnalysisResponse> {

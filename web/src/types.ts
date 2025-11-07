@@ -43,6 +43,11 @@ export interface Job {
   createdAt: string;
   score?: number;
   epIndicator?: CompassVerdict;
+  url?: string;
+  applyUrl?: string;
+  isInternSG?: boolean;
+  hrName?: string;
+  source?: string;
 }
 
 export type CompassVerdict = 'Likely' | 'Borderline' | 'Unlikely';

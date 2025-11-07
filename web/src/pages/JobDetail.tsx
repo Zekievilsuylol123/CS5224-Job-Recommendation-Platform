@@ -4,7 +4,7 @@ import BreakdownCards from '../components/BreakdownCards';
 import ProfileChips from '../components/ProfileChips';
 import ScoreGauge from '../components/ScoreGauge';
 import Modal from '../components/Modal';
-import { analyzeJobFit, createApplication, searchHRContacts, generateOutreachMessage, type HRProspect, type JobAnalysisResponse } from '../api/client';
+import { analyzeJobFit, createApplication, searchHRContacts, generateOutreachMessage, fetchExistingAssessment, type HRProspect, type JobAnalysisResponse } from '../api/client';
 import { useJobDetail } from '../hooks/useJobs';
 import { useProfileStore } from '../store/profile';
 import type { CompassScore } from '../types';
@@ -56,7 +56,27 @@ export default function JobDetailPage(): JSX.Element {
     }
   }, [data?.score, data?.epIndicator, data?.breakdown, data?.rationale]);
 
-  if (!id) {
+  // Fetch existing assessment on page load (without generating new one)
+  useEffect(() => {
+    const loadExistingAssessment = async () => {
+      if (!id) return;
+      
+      try {
+        const result = await fetchExistingAssessment(id);
+        setAssessmentReport(result);
+        if (result.compass_score) {
+          setScoreOverride(result.compass_score.total);
+          setVerdictOverride(result.compass_score.verdict);
+          setScoreDetails(result.compass_score);
+        }
+      } catch (error) {
+        // No existing assessment found - this is fine, user can generate one if needed
+        console.log('No existing assessment found');
+      }
+    };
+
+    loadExistingAssessment();
+  }, [id]);  if (!id) {
     return (
       <div className="mx-auto max-w-4xl px-6 py-12">
         <p className="text-sm text-red-500">Job not found.</p>
@@ -66,8 +86,41 @@ export default function JobDetailPage(): JSX.Element {
 
   if (isLoading || !data) {
     return (
-      <div className="mx-auto max-w-5xl px-6 py-12">
-        <p className="text-sm text-slate-500">Loading job details...</p>
+      <div className="mx-auto max-w-7xl px-6 py-12">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Main Content Skeleton */}
+          <div className="lg:col-span-2 space-y-6">
+            <div className="rounded-3xl border border-slate-200 bg-white p-8 shadow-card">
+              <div className="animate-pulse space-y-4">
+                <div className="h-4 bg-slate-200 rounded w-1/4"></div>
+                <div className="h-8 bg-slate-200 rounded w-3/4"></div>
+                <div className="h-4 bg-slate-200 rounded w-1/2"></div>
+                <div className="mt-6 space-y-3">
+                  <div className="h-4 bg-slate-200 rounded"></div>
+                  <div className="h-4 bg-slate-200 rounded"></div>
+                  <div className="h-4 bg-slate-200 rounded w-5/6"></div>
+                </div>
+              </div>
+            </div>
+            <div className="rounded-3xl border border-slate-200 bg-white p-8 shadow-card">
+              <div className="animate-pulse space-y-3">
+                <div className="h-10 bg-slate-200 rounded w-full"></div>
+                <div className="h-10 bg-slate-200 rounded w-full"></div>
+              </div>
+            </div>
+          </div>
+          
+          {/* Sidebar Skeleton */}
+          <div className="lg:col-span-1 space-y-6">
+            <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-card">
+              <div className="animate-pulse space-y-3">
+                <div className="h-6 bg-slate-200 rounded w-3/4"></div>
+                <div className="h-4 bg-slate-200 rounded"></div>
+                <div className="h-4 bg-slate-200 rounded w-5/6"></div>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
     );
   }
@@ -88,33 +141,13 @@ export default function JobDetailPage(): JSX.Element {
     try {
       const result = await analyzeJobFit(id, regenerate);
       setAssessmentReport(result);
-      setScoreOverride(result.overall_score);
       
-      // Map decision to verdict
-      const verdictMap = {
-        'strong_match': 'Likely',
-        'possible_match': 'Borderline',
-        'weak_match': 'Unlikely',
-        'reject': 'Unlikely'
-      } as const;
-      setVerdictOverride(verdictMap[result.decision]);
-      
-      // Convert subscores to breakdown format
-      const breakdown = {
-        salary: Math.round((result.subscores.tools_stack / 5) * 20),
-        qualifications: Math.round((result.subscores.must_have / 5) * 20),
-        diversity: Math.round((result.subscores.domain_fit / 5) * 20),
-        support: Math.round((result.subscores.communication / 5) * 20),
-        skills: Math.round((result.subscores.nice_to_have / 5) * 20),
-        strategic: Math.round((result.subscores.impact_evidence / 5) * 10)
-      };
-      
-      setScoreDetails({
-        total: result.overall_score,
-        breakdown,
-        verdict: verdictMap[result.decision],
-        notes: result.recommendations_to_candidate
-      });
+      // Update COMPASS score with the recalculated score based on detailed JD
+      if (result.compass_score) {
+        setScoreOverride(result.compass_score.total);
+        setVerdictOverride(result.compass_score.verdict);
+        setScoreDetails(result.compass_score);
+      }
       
       setStatus('success');
       setStatusMessage(result.from_cache && !regenerate 
@@ -130,7 +163,10 @@ export default function JobDetailPage(): JSX.Element {
   };
 
   const handleOpenExternalLink = () => {
-    const externalUrl = (data as any).url || `https://www.linkedin.com/jobs/search/?keywords=${encodeURIComponent(data.title + ' ' + data.company)}`;
+    if (!data) return;
+    
+    // Use applyUrl if available, otherwise fall back to url
+    const externalUrl = data.applyUrl || data.url || '';
     
     // Open external job link
     window.open(externalUrl, '_blank', 'noopener,noreferrer');
@@ -148,7 +184,7 @@ export default function JobDetailPage(): JSX.Element {
     }
     
     try {
-      const externalUrl = (data as any).url || '';
+      const externalUrl = data.applyUrl || data.url || '';
       const application = await createApplication({
         jobId: data.id,
         jobTitle: data.title,
@@ -173,6 +209,14 @@ export default function JobDetailPage(): JSX.Element {
   const handleContactHR = async () => {
     if (!profile) {
       navigate('/assessment');
+      return;
+    }
+    
+    // Check if this is an InternSG company (smaller company)
+    if (data.isInternSG) {
+      setActiveModal('hr');
+      setHrLoading(false);
+      setHrProspects([]); // No prospects for InternSG
       return;
     }
     
@@ -301,13 +345,71 @@ export default function JobDetailPage(): JSX.Element {
       <Modal
         open={activeModal === 'hr'}
         title="HR Contacts"
-        description={`Found ${hrProspects.length} HR contacts at ${data.company}`}
+        description={data.isInternSG 
+          ? `This is a smaller company from InternSG` 
+          : `Found ${hrProspects.length} HR contacts at ${data.company}`
+        }
         onClose={() => {
           setActiveModal(null);
           setHrProspects([]);
+          setOutreachMessage(null);
+          setSelectedHRContact(null);
         }}
       >
         <div className="space-y-4">
+          {data.isInternSG ? (
+            <div className="rounded-lg bg-blue-50 border border-blue-200 p-6">
+              <div className="flex items-start gap-3">
+                <svg className="h-6 w-6 text-blue-600 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <div className="flex-1">
+                  <h4 className="font-semibold text-blue-900 mb-2">InternSG Company</h4>
+                  <p className="text-sm text-blue-800 mb-4 leading-relaxed">
+                    This position is from a smaller company listed on InternSG. HR outreach may not be available through our platform. 
+                    {data.hrName && (
+                      <>
+                        {' '}Please search for <span className="font-semibold">{data.hrName}</span> on LinkedIn or apply directly on InternSG.
+                      </>
+                    )}
+                  </p>
+                  {data.hrName && (
+                    <div className="rounded-md bg-white border border-blue-200 p-4 mb-4">
+                      <p className="text-xs font-semibold text-blue-700 uppercase tracking-wide mb-2">HR Contact</p>
+                      <p className="text-base text-blue-900 font-bold mb-3">{data.hrName}</p>
+                      <button
+                        onClick={() => {
+                          const searchQuery = `site:linkedin.com/in/ ${data.hrName} ${data.company}`;
+                          const googleSearchUrl = `https://www.google.com/search?q=${encodeURIComponent(searchQuery)}`;
+                          window.open(googleSearchUrl, '_blank');
+                        }}
+                        className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition-colors"
+                      >
+                        <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 24 24">
+                          <path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433c-1.144 0-2.063-.926-2.063-2.065 0-1.138.92-2.063 2.063-2.063 1.14 0 2.064.925 2.064 2.063 0 1.139-.925 2.065-2.064 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/>
+                        </svg>
+                        Search on LinkedIn
+                      </button>
+                    </div>
+                  )}
+                  <div className="space-y-2">
+                    <p className="text-sm font-semibold text-blue-900">Recommended Actions:</p>
+                    <ul className="text-sm text-blue-800 space-y-1.5">
+                      <li className="flex items-start gap-2">
+                        <span className="text-blue-600 mt-0.5">•</span>
+                        <span>Apply directly on InternSG using the Apply Now button</span>
+                      </li>
+                      <li className="flex items-start gap-2">
+                        <span className="text-blue-600 mt-0.5">•</span>
+                        <span>Check the company's website or LinkedIn page for contact information</span>
+                      </li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <>
           {hrLoading ? (
             <div className="flex items-center justify-center py-8">
               <svg className="animate-spin h-8 w-8 text-brand-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
@@ -401,6 +503,8 @@ export default function JobDetailPage(): JSX.Element {
                 </div>
               ))}
             </div>
+          )}
+          </>
           )}
         </div>
       </Modal>
@@ -718,27 +822,23 @@ export default function JobDetailPage(): JSX.Element {
               </div>
               <ScoreGauge value={currentScore} verdict={currentVerdict} />
             </div>
-            <p className="mt-6 whitespace-pre-line text-sm leading-relaxed text-slate-600">{data.description}</p>
-            <div className="mt-6">
-              <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Requirements</h3>
-              <ul className="mt-3 space-y-2 text-sm text-slate-600">
-                {data.requirements.map((req) => (
-                  <li key={req}>- {req}</li>
-                ))}
-              </ul>
-            </div>
-            <div className="mt-6 flex flex-wrap gap-3 text-sm text-slate-500">
-              <span>
-                Salary:{' '}
-                {data.salaryMinSGD && data.salaryMaxSGD
-                  ? `$${data.salaryMinSGD.toLocaleString()} - $${data.salaryMaxSGD.toLocaleString()}`
-                  : 'Pending'}
-              </span>
-              <span>Employer size: {data.employer.size}</span>
-              {data.employer.diversityScore && (
-                <span>Diversity: {(data.employer.diversityScore * 100).toFixed(0)}%</span>
-              )}
-            </div>
+            <div 
+              className="mt-6 text-sm leading-relaxed text-slate-600"
+              dangerouslySetInnerHTML={{ 
+                __html: data.description
+                  // Convert markdown-style headers to bold
+                  .replace(/^#{1,3}\s+(.+)$/gm, '<h3 class="text-base font-bold text-slate-900 mt-6 mb-3">$1</h3>')
+                  // Make lines ending with colon bold (like "Key Qualifications:")
+                  .replace(/^([^:\n]+):$/gm, '<p class="font-semibold text-slate-900 mt-4 mb-2">$1:</p>')
+                  // Convert double newlines to paragraphs
+                  .split('\n\n')
+                  .map(para => {
+                    if (para.trim().startsWith('<')) return para; // Already has HTML
+                    return `<p class="mb-4">${para.replace(/\n/g, '<br />')}</p>`;
+                  })
+                  .join('')
+              }}
+            />
           </div>
 
           <div className="rounded-3xl border border-slate-200 bg-white p-8 shadow-card">

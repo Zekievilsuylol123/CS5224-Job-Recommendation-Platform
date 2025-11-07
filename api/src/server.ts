@@ -23,6 +23,7 @@ import { requireAuth, optionalAuth } from './middleware/auth.js';
 import { supabaseAdmin } from './supabase.js';
 import { fetchExternalJobs, filterJobs } from './jobs/external.js';
 import { getMatchingJD } from './jobs/mockJDs.js';
+import { fetchJobDescription, isInternSGCompany } from './jobs/jdFetcher.js';
 
 // ============================================================================
 // HELPER FUNCTIONS FOR PROFILE TRANSFORMATION
@@ -415,6 +416,7 @@ export async function buildServer(): Promise<express.Express> {
 
         return {
           ...job,
+          requirements: job.tags, // Map tags to requirements for frontend
           score: score.total,
           epIndicator: score.verdict
         };
@@ -451,6 +453,12 @@ export async function buildServer(): Promise<express.Express> {
         return;
       }
 
+      // Fetch real JD from webhook
+      const jdData = await fetchJobDescription(job.url, job.company);
+      
+      // Determine if this is an InternSG company (smaller company)
+      const isInternSG = isInternSGCompany(job.company);
+      
       // Get user profile for scoring if authenticated
       let userProfile: Partial<User> | null = null;
       if (req.user) {
@@ -486,14 +494,20 @@ export async function buildServer(): Promise<express.Express> {
         }
       });
 
+      // Use real JD text if available, otherwise fall back to basic description
+      let description = jdData?.jdText || `Join ${job.company} as a ${job.title}. This role offers an exciting opportunity to work in ${job.location}. Posted on ${job.date}.\n\nFor more details and to apply, visit: ${job.url}`;
+      
+      // Add InternSG notice if applicable (will be rendered separately in frontend)
+      // Don't add it to description since frontend handles it with a special component
+
       // Map external job to expected Job interface
       res.json({
         id: job.id,
-        title: job.title,
+        title: jdData?.title || job.title,
         company: job.company,
-        location: job.location,
+        location: jdData?.location || job.location,
         industry: job.industry || 'Technology',
-        description: `Join ${job.company} as a ${job.title}. This role offers an exciting opportunity to work in ${job.location}. Posted on ${job.date}.\n\nFor more details and to apply, visit: ${job.url}`,
+        description,
         requirements: job.tags,
         salaryMinSGD: undefined,
         salaryMaxSGD: undefined,
@@ -502,12 +516,74 @@ export async function buildServer(): Promise<express.Express> {
           diversityScore: 0.7,
           hasSponsorship: true
         },
-        createdAt: job.date,
+        createdAt: jdData?.postedAt || job.date,
         url: job.url,
+        applyUrl: jdData?.applyUrl || job.url,
         score: score.total,
         epIndicator: score.verdict,
         rationale: score.notes.slice(0, 4),
-        breakdown: score.breakdown
+        breakdown: score.breakdown,
+        // Additional metadata
+        isInternSG,
+        hrName: jdData?.hrName,
+        source: jdData?.source || 'External API'
+      });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  // Get existing assessment for a job (without generating new one)
+  router.get('/jobs/:id/assessment', requireAuth, async (req, res, next) => {
+    try {
+      const externalJobs = await fetchExternalJobs();
+      const job = externalJobs.find(j => j.id === req.params.id);
+      
+      if (!job) {
+        res.status(404).json({ error: 'not_found', message: 'Job not found' });
+        return;
+      }
+
+      // Get the most recent resume analysis
+      const { data: resumeAnalysis } = await supabaseAdmin
+        .from('resume_analyses')
+        .select('id')
+        .eq('user_id', req.user!.id)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .single();
+
+      if (!resumeAnalysis) {
+        res.status(404).json({ error: 'not_found', message: 'No assessment found' });
+        return;
+      }
+
+      // Check if we have an existing assessment
+      const { data: existingAssessment, error } = await supabaseAdmin
+        .from('job_assessments')
+        .select('*')
+        .eq('user_id', req.user!.id)
+        .eq('job_external_id', req.params.id)
+        .eq('resume_analysis_id', resumeAnalysis.id)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .single();
+
+      if (error || !existingAssessment) {
+        res.status(404).json({ error: 'not_found', message: 'No assessment found' });
+        return;
+      }
+
+      // Return existing assessment
+      res.json({
+        ...existingAssessment,
+        subscores: existingAssessment.subscores as any,
+        evidence: existingAssessment.evidence as any,
+        gaps: existingAssessment.gaps as any,
+        questions_for_interview: existingAssessment.questions_for_interview as string[],
+        recommendations_to_candidate: existingAssessment.recommendations_to_candidate as string[],
+        compass_score: existingAssessment.compass_score as any,
+        from_cache: true
       });
     } catch (error) {
       next(error);
@@ -564,6 +640,7 @@ export async function buildServer(): Promise<express.Express> {
             gaps: existingAssessment.gaps as any,
             questions_for_interview: existingAssessment.questions_for_interview as string[],
             recommendations_to_candidate: existingAssessment.recommendations_to_candidate as string[],
+            compass_score: existingAssessment.compass_score as any, // Include stored COMPASS score
             from_cache: true
           });
           return;
@@ -571,11 +648,13 @@ export async function buildServer(): Promise<express.Express> {
       }
 
       // Generate new assessment
-      const jobDescription = getMatchingJD(job.title);
+      // Fetch real JD from webhook
+      const jdData = await fetchJobDescription(job.url, job.company);
+      const jobDescription = jdData?.jdText || `${job.title} at ${job.company}. Location: ${job.location}. Tags: ${job.tags.join(', ')}`;
 
       // Create role template for comprehensive LLM scorer
       const roleTemplate: RoleTemplate = {
-        title: job.title,
+        title: jdData?.title || job.title,
         industry: job.industry || 'Technology',
         baseSalary: [5000, 10000], // Default range
         requirements: job.tags,
@@ -647,6 +726,33 @@ export async function buildServer(): Promise<express.Express> {
       // Parse the comprehensive assessment
       const assessment = JSON.parse(response.output_text);
       
+      // Also calculate COMPASS score with the detailed JD using LLM
+      const userProfile: Partial<User> = {
+        id: req.user!.id,
+        name: resumeData.name || 'Candidate',
+        educationLevel: resumeData.education?.[0]?.degree?.includes('Master') ? 'Masters' : 
+                       resumeData.education?.[0]?.degree?.includes('PhD') ? 'PhD' :
+                       resumeData.education?.[0]?.degree?.includes('Bachelor') ? 'Bachelors' : 'Diploma',
+        educationInstitution: resumeData.education?.[0]?.institution,
+        certifications: resumeData.certifications,
+        yearsExperience: resumeData.experience?.length || 0,
+        skills: resumeData.skills || [],
+        expectedSalarySGD: undefined,
+        plan: 'freemium'
+      };
+
+      const compassScore = await scoreCompassWithLLM({
+        user: userProfile,
+        job: {
+          title: roleTemplate.title,
+          company: job.company,
+          location: job.location,
+          industry: roleTemplate.industry,
+          requirements: roleTemplate.requirements,
+          description: roleTemplate.description
+        }
+      });
+      
       // Save to database
       const { data: savedAssessment, error: saveError } = await supabaseAdmin
         .from('job_assessments')
@@ -667,7 +773,8 @@ export async function buildServer(): Promise<express.Express> {
           gaps: assessment.gaps,
           questions_for_interview: assessment.questions_for_interview,
           recommendations_to_candidate: assessment.recommendations_to_candidate,
-          notes: assessment.notes
+          notes: assessment.notes,
+          compass_score: compassScore // Store the recalculated COMPASS score
         }, {
           onConflict: 'user_id,job_external_id,resume_analysis_id'
         })
@@ -680,6 +787,7 @@ export async function buildServer(): Promise<express.Express> {
 
       res.json({
         ...assessment,
+        compass_score: compassScore, // Include the recalculated COMPASS score
         from_cache: false
       });
     } catch (error) {

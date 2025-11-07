@@ -30,14 +30,33 @@ export default function JobCard({ job, actionable = true }: Props): JSX.Element 
         </span>
       </div>
       <p className="mt-4 line-clamp-3 text-sm text-slate-600">{job.description}</p>
-      <div className="mt-4 flex items-center justify-between text-sm text-slate-500">
-        {job.salaryMinSGD && job.salaryMaxSGD ? (
-          <span>
-            Salary: ${job.salaryMinSGD.toLocaleString()} - ${job.salaryMaxSGD.toLocaleString()}
+      
+      {/* Tags Section */}
+      <div className="mt-4 flex flex-wrap gap-2">
+        {/* Job Type Badge */}
+        {job.title.toLowerCase().includes('intern') && (
+          <span className="inline-flex items-center rounded-full bg-blue-100 px-2.5 py-0.5 text-xs font-semibold text-blue-700">
+            Internship
           </span>
-        ) : (
-          <span>Salary band pending</span>
         )}
+        {!job.title.toLowerCase().includes('intern') && (
+          <span className="inline-flex items-center rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-semibold text-green-700">
+            Full-time
+          </span>
+        )}
+        
+        {/* All Tags (excluding job type tags) */}
+        {job.requirements && job.requirements
+          .filter(tag => !['internship', 'full-time', 'part-time', 'contract'].includes(tag.toLowerCase()))
+          .map((tag) => (
+            <span key={tag} className="inline-flex items-center rounded-full bg-purple-100 px-2.5 py-0.5 text-xs font-medium text-purple-700">
+              {tag}
+            </span>
+          ))
+        }
+      </div>
+      
+      <div className="mt-4 flex items-center justify-between text-sm text-slate-500">
         {job.score !== undefined && <span>Compass {job.score}</span>}
       </div>
       {actionable && (
