@@ -11,6 +11,9 @@ importers:
       openai:
         specifier: ^6.7.0
         version: 6.7.0(ws@8.18.3)(zod@3.25.76)
+      zod:
+        specifier: 3.25.76
+        version: 3.25.76
 
   api:
     dependencies:
@@ -34,7 +37,7 @@ importers:
         version: 1.4.5-lts.2
       openai:
         specifier: ^6.7.0
-        version: 6.7.0(zod@3.25.76)
+        version: 6.7.0(ws@8.18.3)(zod@3.25.76)
       pdf-parse:
         specifier: ^1.1.1
         version: 1.1.2
