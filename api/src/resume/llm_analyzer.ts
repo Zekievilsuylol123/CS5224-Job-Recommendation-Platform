@@ -4,6 +4,7 @@ import path from "node:path";
 import { z } from "zod";
 import { zodTextFormat } from "openai/helpers/zod";
 import { toFile } from "openai/uploads";
+import { resourcePath } from "../utils/resourcePath.js";
 
 const client = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -44,7 +45,10 @@ export async function extract_resume_info(resume: Express.Multer.File): Promise<
     purpose: "assistants"
   });
 
-  const prompt = fs.readFileSync(path.join("resources", "llm_prompts", "extract_resume_info.txt"), "utf8");
+  const prompt = fs.readFileSync(
+    resourcePath("llm_prompts/extract_resume_info.txt"),
+    "utf8"
+  );
   console.log(prompt);
 
   const res = await client.responses.create({
