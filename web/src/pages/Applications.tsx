@@ -1,14 +1,22 @@
 import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { fetchApplications } from '../api/client';
 import EmptyState from '../components/EmptyState';
 import { useProfileStore } from '../store/profile';
 
 export default function ApplicationsPage(): JSX.Element {
+  const navigate = useNavigate();
   const profile = useProfileStore((state) => state.profile);
   const applications = useProfileStore((state) => state.applications);
   const setApplications = useProfileStore((state) => state.setApplications);
   const [status, setStatus] = useState<'idle' | 'loading' | 'error'>('idle');
+
+  // Redirect to assessment if no profile or no activated profile (not saved to DB)
+  useEffect(() => {
+    if (!profile || !profile.id || profile.id === 'local-user' || !profile.skills || profile.skills.length === 0) {
+      navigate('/assessment');
+    }
+  }, [profile, navigate]);
 
   useEffect(() => {
     let mounted = true;

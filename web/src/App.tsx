@@ -1,5 +1,5 @@
 import { Link, NavLink, Route, Routes } from 'react-router-dom';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import AuthProvider from './components/AuthProvider';
 import ProtectedRoute from './components/ProtectedRoute';
 import LandingPage from './pages/Landing';
@@ -13,6 +13,7 @@ import ProfileMenu from './components/ProfileMenu';
 import UserMenu from './components/UserMenu';
 import MobileProfileInfo from './components/MobileProfileInfo';
 import { useAuthStore } from './store/auth';
+import { useProfileStore } from './store/profile';
 
 const navLinkClass = ({ isActive }: { isActive: boolean }): string =>
   [
@@ -20,9 +21,30 @@ const navLinkClass = ({ isActive }: { isActive: boolean }): string =>
     isActive ? 'bg-brand-100 text-brand-800' : 'text-slate-600 hover:bg-slate-100'
   ].join(' ');
 
+const lockedNavLinkClass = (): string =>
+  'px-3 py-2 rounded-md text-sm font-medium text-slate-300 cursor-not-allowed opacity-60 relative group';
+
 export default function App(): JSX.Element {
   const { user } = useAuthStore();
+  const profile = useProfileStore((state) => state.profile);
+  const loadProfileFromDB = useProfileStore((state) => state.loadProfileFromDB);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  
+  useEffect(() => {
+    // Load profile from DB when user logs in
+    if (user) {
+      loadProfileFromDB().catch((err) => console.warn('Failed to load profile on init', err));
+    }
+  }, [user, loadProfileFromDB]);
+  // Check if profile is activated (saved to DB with resume)
+  // Must have a real ID (not 'local-user') and skills
+  const isProfileActivated = !!(
+    profile && 
+    profile.id && 
+    profile.id !== 'local-user' && 
+    profile.skills && 
+    profile.skills.length > 0
+  );
 
   return (
     <AuthProvider>
@@ -39,15 +61,31 @@ export default function App(): JSX.Element {
                 <NavLink to="/assessment" className={navLinkClass}>
                   Self-Assessment
                 </NavLink>
-                <NavLink to="/dashboard" className={navLinkClass}>
-                  Dashboard
-                </NavLink>
-                <NavLink to="/jobs" className={navLinkClass}>
-                  Jobs
-                </NavLink>
-                <NavLink to="/applications" className={navLinkClass}>
-                  Applications
-                </NavLink>
+                {isProfileActivated ? (
+                  <>
+                    <NavLink to="/dashboard" className={navLinkClass}>
+                      Dashboard
+                    </NavLink>
+                    <NavLink to="/jobs" className={navLinkClass}>
+                      Jobs
+                    </NavLink>
+                    <NavLink to="/applications" className={navLinkClass}>
+                      Applications
+                    </NavLink>
+                  </>
+                ) : (
+                  <>
+                    <span data-tour="locked-navigation" className={lockedNavLinkClass()} title="Complete self-assessment first">
+                      Dashboard
+                    </span>
+                    <span className={lockedNavLinkClass()} title="Complete self-assessment first">
+                      Jobs
+                    </span>
+                    <span className={lockedNavLinkClass()} title="Complete self-assessment first">
+                      Applications
+                    </span>
+                  </>
+                )}
               </nav>
               
               {/* Desktop User Menu */}
@@ -92,45 +130,61 @@ export default function App(): JSX.Element {
                   >
                     Self-Assessment
                   </NavLink>
-                  <NavLink
-                    to="/dashboard"
-                    className={({ isActive }) =>
-                      `block px-3 py-2 rounded-md text-base font-medium ${
-                        isActive
-                          ? 'bg-brand-100 text-brand-800'
-                          : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
-                      }`
-                    }
-                    onClick={() => setMobileMenuOpen(false)}
-                  >
-                    Dashboard
-                  </NavLink>
-                  <NavLink
-                    to="/jobs"
-                    className={({ isActive }) =>
-                      `block px-3 py-2 rounded-md text-base font-medium ${
-                        isActive
-                          ? 'bg-brand-100 text-brand-800'
-                          : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
-                      }`
-                    }
-                    onClick={() => setMobileMenuOpen(false)}
-                  >
-                    Jobs
-                  </NavLink>
-                  <NavLink
-                    to="/applications"
-                    className={({ isActive }) =>
-                      `block px-3 py-2 rounded-md text-base font-medium ${
-                        isActive
-                          ? 'bg-brand-100 text-brand-800'
-                          : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
-                      }`
-                    }
-                    onClick={() => setMobileMenuOpen(false)}
-                  >
-                    Applications
-                  </NavLink>
+                  {isProfileActivated ? (
+                    <>
+                      <NavLink
+                        to="/dashboard"
+                        className={({ isActive }) =>
+                          `block px-3 py-2 rounded-md text-base font-medium ${
+                            isActive
+                              ? 'bg-brand-100 text-brand-800'
+                              : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+                          }`
+                        }
+                        onClick={() => setMobileMenuOpen(false)}
+                      >
+                        Dashboard
+                      </NavLink>
+                      <NavLink
+                        to="/jobs"
+                        className={({ isActive }) =>
+                          `block px-3 py-2 rounded-md text-base font-medium ${
+                            isActive
+                              ? 'bg-brand-100 text-brand-800'
+                              : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+                          }`
+                        }
+                        onClick={() => setMobileMenuOpen(false)}
+                      >
+                        Jobs
+                      </NavLink>
+                      <NavLink
+                        to="/applications"
+                        className={({ isActive }) =>
+                          `block px-3 py-2 rounded-md text-base font-medium ${
+                            isActive
+                              ? 'bg-brand-100 text-brand-800'
+                              : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+                          }`
+                        }
+                        onClick={() => setMobileMenuOpen(false)}
+                      >
+                        Applications
+                      </NavLink>
+                    </>
+                  ) : (
+                    <>
+                      <span className="block px-3 py-2 rounded-md text-base font-medium text-slate-300 cursor-not-allowed">
+                        Dashboard
+                      </span>
+                      <span className="block px-3 py-2 rounded-md text-base font-medium text-slate-300 cursor-not-allowed">
+                        Jobs
+                      </span>
+                      <span className="block px-3 py-2 rounded-md text-base font-medium text-slate-300 cursor-not-allowed">
+                        Applications
+                      </span>
+                    </>
+                  )}
                   
                   {/* Mobile Profile Info - Always Visible */}
                   <div className="pt-4 mt-3 border-t border-slate-200">

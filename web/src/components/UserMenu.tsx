@@ -129,7 +129,9 @@ export default function UserMenu(): JSX.Element {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-xs font-medium text-slate-500 uppercase tracking-wide">Latest COMPASS Score</p>
-                  <p className="text-lg font-bold text-slate-900 mt-1">{profile.latestCompassScore.total}/110</p>
+                  <p className="text-lg font-bold text-slate-900 mt-1">
+                    {profile.latestCompassScore.totalRaw ?? profile.latestCompassScore.total}/110
+                  </p>
                 </div>
                 <div className={`rounded-lg px-3 py-1 text-xs font-semibold ${
                   profile.latestCompassScore.verdict === 'Likely' ? 'bg-green-100 text-green-700' :

@@ -54,6 +54,31 @@ export async function fetchExternalJobs(): Promise<NormalizedJob[]> {
       const companySlug = job.c.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
       const id = `ext-${companySlug}-${job.d}-${index}`;
       
+      // Enhance tags based on job title
+      const enhancedTags = [...(job.g || [])];
+      const titleLower = job.t.toLowerCase();
+      
+      // Add Marketing tag if title contains marketing-related keywords
+      if (titleLower.includes('marketing') || 
+          titleLower.includes('brand') || 
+          titleLower.includes('content') ||
+          titleLower.includes('digital marketing') ||
+          titleLower.includes('growth') ||
+          titleLower.includes('seo') ||
+          titleLower.includes('sem')) {
+        if (!enhancedTags.includes('Marketing')) {
+          enhancedTags.push('Marketing');
+        }
+      }
+      
+      // Add "Others" tag if no specific category tags exist
+      const hasSpecificTag = enhancedTags.some(tag => 
+        !['remote', 'hybrid', 'full-time', 'part-time', 'contract', 'internship'].includes(tag.toLowerCase())
+      );
+      if (!hasSpecificTag) {
+        enhancedTags.push('Others');
+      }
+      
       return {
         id,
         title: job.t,
@@ -61,8 +86,8 @@ export async function fetchExternalJobs(): Promise<NormalizedJob[]> {
         location: job.m,
         url: job.u,
         date: job.d,
-        tags: job.g || [],
-        industry: inferIndustry(job.g || [])
+        tags: enhancedTags,
+        industry: inferIndustry(enhancedTags)
       };
     });
     
@@ -88,13 +113,13 @@ export async function fetchExternalJobs(): Promise<NormalizedJob[]> {
  */
 function inferIndustry(tags: string[]): string | undefined {
   const industryMap: Record<string, string> = {
-    'Technology': 'technology',
-    'Finance': 'finance',
-    'Healthcare': 'healthcare',
-    'Consulting': 'professional services',
-    'Manufacturing': 'manufacturing',
-    'Logistics': 'logistics',
-    'Energy': 'energy'
+    'Technology': 'Technology',
+    'Finance': 'Finance',
+    'Healthcare': 'Healthcare',
+    'Consulting': 'Consulting',
+    'Manufacturing': 'Manufacturing',
+    'Logistics': 'Logistics',
+    'Energy': 'Energy'
   };
   
   for (const tag of tags) {
@@ -102,7 +127,8 @@ function inferIndustry(tags: string[]): string | undefined {
     if (industry) return industry;
   }
   
-  return undefined;
+  // Default to Technology if no industry found
+  return 'Technology';
 }
 
 /**
@@ -149,20 +175,28 @@ export function filterJobs(
     );
   }
 
-  // Tags filter
+  // Tags filter (supports multiple comma-separated tags)
   if (filters.tags) {
-    const tagLower = filters.tags.toLowerCase();
-    filtered = filtered.filter(job =>
-      job.tags.some(tag => tag.toLowerCase() === tagLower)
-    );
+    const selectedTags = filters.tags.split(',').map(t => t.trim().toLowerCase()).filter(t => t);
+    if (selectedTags.length > 0) {
+      filtered = filtered.filter(job =>
+        selectedTags.some(selectedTag =>
+          job.tags.some(tag => tag.toLowerCase() === selectedTag)
+        )
+      );
+    }
   }
 
-  // Company filter
+  // Company filter (supports multiple comma-separated companies)
   if (filters.company) {
-    const companyLower = filters.company.toLowerCase();
-    filtered = filtered.filter(job =>
-      job.company.toLowerCase() === companyLower
-    );
+    const selectedCompanies = filters.company.split(',').map(c => c.trim().toLowerCase()).filter(c => c);
+    if (selectedCompanies.length > 0) {
+      filtered = filtered.filter(job =>
+        selectedCompanies.some(selectedCompany =>
+          job.company.toLowerCase() === selectedCompany
+        )
+      );
+    }
   }
 
   // Limit results

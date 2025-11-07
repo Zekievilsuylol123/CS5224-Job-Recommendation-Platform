@@ -1,12 +1,21 @@
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
+import { useEffect } from 'react';
 import JobCard from '../components/JobCard';
 import EmptyState from '../components/EmptyState';
 import { useTopJobs } from '../hooks/useJobs';
 import { useProfileStore } from '../store/profile';
 
 export default function DashboardPage(): JSX.Element {
+  const navigate = useNavigate();
   const profile = useProfileStore((state) => state.profile);
   const { data, isLoading } = useTopJobs();
+
+  // Redirect to assessment if no profile or no activated profile (not saved to DB)
+  useEffect(() => {
+    if (!profile || !profile.id || profile.id === 'local-user' || !profile.skills || profile.skills.length === 0) {
+      navigate('/assessment');
+    }
+  }, [profile, navigate]);
 
   if (!profile) {
     return (

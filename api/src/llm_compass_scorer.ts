@@ -64,8 +64,21 @@ export async function scoreCompassWithLLM(input: AssessmentInput): Promise<Compa
   console.log("LLM Response:", response.output_text);
 
   // Parse the JSON response
-  const result = JSON.parse(response.output_text);
-  return result as CompassScore;
+  const result = JSON.parse(response.output_text) as CompassScore;
+
+  // Compute totalRaw from breakdown (sum of criterion points)
+  const breakdownValues = Object.values(result.breakdown || {}) as number[];
+  const totalRaw = breakdownValues.reduce((s, v) => s + (Number.isFinite(v) ? v : 0), 0);
+
+  // Normalize total percentage against 110 (total possible points)
+  const TOTAL_POSSIBLE = 110;
+  const totalPercent = Math.round((totalRaw / TOTAL_POSSIBLE) * 100);
+
+  // Augment/overwrite to ensure consistency between breakdown and totals
+  (result as any).totalRaw = totalRaw;
+  (result as any).total = totalPercent;
+
+  return result as CompassScore & { totalRaw: number };
 }
 
 /**
@@ -105,7 +118,7 @@ function formatAssessmentInput(input: AssessmentInput): string {
   }
   
   // Salary
-  if (user.expectedSalarySGD !== undefined) {
+  if (user.expectedSalarySGD !== undefined && user.expectedSalarySGD !== null) {
     prompt += `**Expected Salary**: SGD $${user.expectedSalarySGD.toLocaleString()}/month\n`;
   } else {
     prompt += `**Expected Salary**: Not provided\n`;

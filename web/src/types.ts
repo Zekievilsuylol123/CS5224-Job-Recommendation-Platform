@@ -16,6 +16,7 @@ export interface User {
   plan: PlanTier;
   latestCompassScore?: {
     total: number;
+    totalRaw: number;
     verdict: CompassVerdict;
     breakdown: CompassBreakdown;
     notes: string[];
@@ -43,6 +44,11 @@ export interface Job {
   createdAt: string;
   score?: number;
   epIndicator?: CompassVerdict;
+  url?: string;
+  applyUrl?: string;
+  isInternSG?: boolean;
+  hrName?: string;
+  source?: string;
 }
 
 export type CompassVerdict = 'Likely' | 'Borderline' | 'Unlikely';
@@ -57,7 +63,8 @@ export interface CompassBreakdown {
 }
 
 export interface CompassScore {
-  total: number;
+  total: number; // percentage (0-100)
+  totalRaw: number; // raw points (0-110)
   breakdown: CompassBreakdown;
   verdict: CompassVerdict;
   notes: string[];

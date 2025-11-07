@@ -7,9 +7,9 @@ export default function LoginPage(): JSX.Element {
   const { user, signInWithGoogle, loading } = useAuthStore();
 
   useEffect(() => {
-    // Redirect to dashboard if already logged in
+    // Redirect to assessment for onboarding if already logged in
     if (user) {
-      navigate('/dashboard');
+      navigate('/assessment');
     }
   }, [user, navigate]);
 
