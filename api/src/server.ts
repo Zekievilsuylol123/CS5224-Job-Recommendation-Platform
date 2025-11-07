@@ -86,10 +86,10 @@ const assessmentSchema = z.object({
       nationality: z.string().optional(),
       educationLevel: z.enum(['Diploma', 'Bachelors', 'Masters', 'PhD']).optional(),
       educationInstitution: z.string().optional(),
-      certifications: z.array(z.string()).optional(),
-      yearsExperience: z.number().optional(),
+      certifications: z.array(z.string()).nullish(),
+      yearsExperience: z.number().nullish(),
       skills: z.array(z.string()).optional(),
-      expectedSalarySGD: z.number().optional(),
+      expectedSalarySGD: z.number().nullish(),
       plan: z.enum(['freemium', 'standard', 'pro', 'ultimate']).optional()
     })
     .default({}),
@@ -249,6 +249,20 @@ export async function buildServer(): Promise<express.Express> {
         throw error;
       }
 
+      // If there's a COMPASS score, fetch the notes from the latest compass_scores record
+      let latestNotes: string[] = [];
+      if (data?.latest_compass_calculated_at) {
+        const { data: compassData } = await supabaseAdmin
+          .from('compass_scores')
+          .select('notes')
+          .eq('user_id', req.user!.id)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .single();
+        
+        latestNotes = compassData?.notes || [];
+      }
+
       // Convert snake_case to camelCase for frontend
       const profile = data ? {
         id: data.id,
@@ -262,13 +276,18 @@ export async function buildServer(): Promise<express.Express> {
         skills: data.skills,
         expectedSalarySGD: data.expected_salary_sgd,
         plan: data.plan,
-        latestCompassScore: data.latest_compass_score ? {
-          total: data.latest_compass_score,
-          verdict: data.latest_compass_verdict,
-          breakdown: data.latest_compass_breakdown,
-          notes: [],
-          calculatedAt: data.latest_compass_calculated_at
-        } : null,
+        latestCompassScore: data.latest_compass_score ? (
+          typeof data.latest_compass_score === 'object'
+            ? data.latest_compass_score
+            : {
+                totalRaw: data.latest_compass_score,
+                total: Math.round((data.latest_compass_score / 110) * 100),
+                verdict: data.latest_compass_verdict,
+                breakdown: data.latest_compass_breakdown,
+                notes: latestNotes,
+                calculatedAt: data.latest_compass_calculated_at
+              }
+        ) : null,
         createdAt: data.created_at,
         updatedAt: data.updated_at
       } : null;
@@ -418,9 +437,10 @@ export async function buildServer(): Promise<express.Express> {
           ...job,
           requirements: job.tags, // Map tags to requirements for frontend
           score: score.total,
+          scoreRaw: score.totalRaw,
           epIndicator: score.verdict
         };
-      }).sort((a, b) => b.score - a.score); // Sort by score descending
+      }).sort((a, b) => b.score - a.score); // Sort by COMPASS score descending
 
       // Apply pagination
       const total = withScores.length;
@@ -520,6 +540,7 @@ export async function buildServer(): Promise<express.Express> {
         url: job.url,
         applyUrl: jdData?.applyUrl || job.url,
         score: score.total,
+        scoreRaw: score.totalRaw,
         epIndicator: score.verdict,
         rationale: score.notes.slice(0, 4),
         breakdown: score.breakdown,
@@ -827,7 +848,7 @@ export async function buildServer(): Promise<express.Express> {
       await supabaseAdmin.from('compass_scores').insert({
         user_id: req.user!.id,
         profile_snapshot: payload.user,
-        total_score: score.total,
+        total_score: (score as any).totalRaw ?? score.total,
         verdict: score.verdict,
         breakdown: score.breakdown,
         notes: score.notes,
@@ -838,7 +859,7 @@ export async function buildServer(): Promise<express.Express> {
       await supabaseAdmin
         .from('profiles')
         .update({
-          latest_compass_score: score.total,
+          latest_compass_score: (score as any).totalRaw ?? score.total,
           latest_compass_verdict: score.verdict,
           latest_compass_breakdown: score.breakdown,
           latest_compass_calculated_at: new Date().toISOString()
@@ -1028,6 +1049,23 @@ export async function buildServer(): Promise<express.Express> {
   // ============================================================================
   // RESUME ANALYSIS ENDPOINTS
   // ============================================================================
+
+  // Get all resume analyses for the current user
+  router.get('/resume/analyses', requireAuth, async (req, res, next) => {
+    try {
+      const { data, error } = await supabaseAdmin
+        .from('resume_analyses')
+        .select('*')
+        .eq('user_id', req.user!.id)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+
+      res.json({ analyses: data || [] });
+    } catch (error) {
+      next(error);
+    }
+  });
 
   router.post(
     '/resume/analyze',

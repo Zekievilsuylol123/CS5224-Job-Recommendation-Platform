@@ -13,6 +13,16 @@ const LABELS: Record<keyof CompassBreakdown, string> = {
   strategic: 'C6 · Strategic Bonus'
 };
 
+// Map keys to their note identifiers (what appears in the actual notes from API)
+const NOTE_IDENTIFIERS: Record<keyof CompassBreakdown, string[]> = {
+  salary: ['C1 Salary', 'salary'],
+  qualifications: ['C2 Qualifications', 'qualifications'],
+  diversity: ['C3 Diversity', 'diversity'],
+  support: ['C4 Support', 'support'],
+  skills: ['C5 Skills', 'skills bonus'],
+  strategic: ['C6 Strategic', 'strategic']
+};
+
 export default function BreakdownCards({ score }: Props): JSX.Element | null {
   if (!score) return null;
 
@@ -28,12 +38,19 @@ export default function BreakdownCards({ score }: Props): JSX.Element | null {
           return true;
         })
         .map(([key, value]) => {
-          const note =
-            score.notes.find((item) => item.toLowerCase().includes(key)) ?? score.notes[0] ?? 'No notes yet.';
+          // Find the note that corresponds to this criterion
+          const identifiers = NOTE_IDENTIFIERS[key];
+          const note = score.notes.find((item) => 
+            identifiers.some(id => item.toLowerCase().includes(id.toLowerCase()))
+          ) ?? 'No detailed note available.';
+          
           return (
             <div key={key} className="rounded-2xl border border-slate-200 bg-white p-4">
               <p className="text-sm font-semibold text-slate-500">{LABELS[key]}</p>
-              <p className="mt-2 text-3xl font-semibold text-slate-900">{value}</p>
+              <p className="mt-2 text-3xl font-semibold text-slate-900">
+                {value}
+                <span className="text-base text-slate-400 ml-1">pts</span>
+              </p>
               <p className="mt-2 text-xs text-slate-500">{note}</p>
             </div>
           );

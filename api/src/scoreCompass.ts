@@ -6,7 +6,13 @@ const DIVERSITY_MAX = 20;
 const SUPPORT_MAX = 20;
 const SKILLS_BONUS_MAX = 20;
 const STRATEGIC_BONUS_MAX = 10;
-const TOTAL_MAX = SALARY_MAX + QUALIFICATIONS_MAX + DIVERSITY_MAX + SUPPORT_MAX + SKILLS_BONUS_MAX + STRATEGIC_BONUS_MAX;
+
+// COMPASS framework (per official MOM documentation):
+// - 4 foundational criteria (C1-C4): 20 pts each = 80 pts max
+// - 2 bonus criteria (C5-C6): 20 + 10 pts = 30 pts max
+// - Total possible: 110 points
+// - Pass threshold: 40 points
+const TOTAL_MAX = SALARY_MAX + QUALIFICATIONS_MAX + DIVERSITY_MAX + SUPPORT_MAX + SKILLS_BONUS_MAX + STRATEGIC_BONUS_MAX; // 110 points
 
 const PASS_THRESHOLD = 40;
 const BORDERLINE_THRESHOLD = 20;
@@ -115,7 +121,7 @@ function resolveSectorBenchmark(industry?: string): { early: number; experienced
 
 function scoreSalary(input: AssessmentInput, notes: string[]): number {
   const expected = input.user.expectedSalarySGD;
-  if (!expected) {
+  if (!expected || expected === null) {
     notes.push('C1 Salary · Missing expected salary; treated as within benchmark (10 pts).');
     return 10;
   }
@@ -123,6 +129,13 @@ function scoreSalary(input: AssessmentInput, notes: string[]): number {
   const benchmark = resolveSectorBenchmark(input.job?.industry);
   const years = input.user.yearsExperience ?? 0;
   const band = years >= EXPERIENCE_THRESHOLD_YEARS ? benchmark.experienced : benchmark.early;
+  
+  // Extra safety check
+  if (!band || band === null) {
+    notes.push('C1 Salary · Unable to determine benchmark; treated as within benchmark (10 pts).');
+    return 10;
+  }
+  
   const ratio = expected / band;
 
   if (ratio >= 1.0) {
@@ -214,6 +227,7 @@ export function scoreCompass(input: AssessmentInput): CompassScore {
 
   return {
     total: totalPercent,
+    totalRaw,
     breakdown: {
       salary: salaryScore,
       qualifications: qualificationScore,

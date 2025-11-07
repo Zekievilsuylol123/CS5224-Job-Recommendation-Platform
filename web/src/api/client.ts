@@ -80,7 +80,7 @@ export interface JobsQueryParams {
 }
 
 export interface JobsResponse {
-  items: (Job & { score: number; epIndicator: string })[];
+  items: (Job & { score: number; scoreRaw: number; epIndicator: string })[];
   total: number;
   page?: number;
   pageSize?: number;
@@ -102,6 +102,7 @@ export interface JobDetailResponse {
   url?: string;
   applyUrl?: string;
   score: number;
+  scoreRaw: number;
   epIndicator: string;
   rationale: string[];
   breakdown?: CompassBreakdown;
@@ -168,6 +169,7 @@ export interface ProfileData {
   plan?: 'freemium' | 'standard' | 'pro' | 'ultimate';
   latestCompassScore?: {
     total: number;
+    totalRaw?: number;
     verdict: CompassVerdict;
     breakdown: CompassBreakdown;
     notes: string[];
@@ -336,4 +338,40 @@ export function updateApplication(id: string, updates: { status?: string; notes?
 
 export function fetchPlans(): Promise<{ items: Array<{ id: string; label: string; price: number }>; gating: Record<string, boolean> }> {
   return apiFetch('/plans', { method: 'GET' });
+}
+
+// ============================================================================
+// RESUME ANALYSIS API
+// ============================================================================
+
+export interface ResumeAnalysis {
+  id: string;
+  user_id: string;
+  file_name: string;
+  file_size: number;
+  mime_type: string;
+  parsed_data: {
+    name: string;
+    email: string;
+    telephone: string;
+    education: Array<{
+      institution: string;
+      degree: string;
+      field_of_study: string;
+      duration: string;
+    }>;
+    skills: string[];
+    experience: Array<{
+      job_title: string;
+      company: string;
+      duration: string;
+      description: string;
+    }>;
+  };
+  processing_time_ms: number;
+  created_at: string;
+}
+
+export function fetchResumeAnalyses(): Promise<{ analyses: ResumeAnalysis[] }> {
+  return apiFetch('/resume/analyses', { method: 'GET' });
 }

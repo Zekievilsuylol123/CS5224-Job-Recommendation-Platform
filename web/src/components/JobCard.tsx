@@ -9,7 +9,7 @@ const indicatorClasses: Record<CompassVerdict, string> = {
 };
 
 interface Props {
-  job: Job & { score?: number; epIndicator?: CompassVerdict };
+  job: Job & { score?: number; scoreRaw?: number; epIndicator?: CompassVerdict };
   actionable?: boolean;
 }
 
@@ -57,7 +57,11 @@ export default function JobCard({ job, actionable = true }: Props): JSX.Element 
       </div>
       
       <div className="mt-4 flex items-center justify-between text-sm text-slate-500">
-        {job.score !== undefined && <span>Compass {job.score}</span>}
+        {job.scoreRaw !== undefined && (
+          <span className="font-medium">
+            <span className="text-slate-400">COMPASS</span> {job.scoreRaw} pts
+          </span>
+        )}
       </div>
       {actionable && (
         <div className="mt-6 flex justify-end">

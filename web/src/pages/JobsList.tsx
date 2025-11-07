@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import JobCard from '../components/JobCard';
 import EmptyState from '../components/EmptyState';
 import MultiSelectDropdown from '../components/MultiSelectDropdown';
 import { useJobs } from '../hooks/useJobs';
 import { fetchJobFilters } from '../api/client';
+import { useProfileStore } from '../store/profile';
 
 interface Filters {
   search: string;
@@ -21,9 +23,18 @@ const defaultFilters: Filters = {
 const PAGE_SIZE = 50;
 
 export default function JobsListPage(): JSX.Element {
+  const navigate = useNavigate();
+  const profile = useProfileStore((state) => state.profile);
   const [filters, setFilters] = useState<Filters>(defaultFilters);
   const [appliedFilters, setAppliedFilters] = useState<Filters>(defaultFilters);
   const [currentPage, setCurrentPage] = useState(1);
+  
+  // Redirect to assessment if no profile or no activated profile (not saved to DB)
+  useEffect(() => {
+    if (!profile || !profile.id || profile.id === 'local-user' || !profile.skills || profile.skills.length === 0) {
+      navigate('/assessment');
+    }
+  }, [profile, navigate]);
   
   // Fetch filter metadata
   const { data: filterMetadata } = useQuery({

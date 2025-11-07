@@ -17,12 +17,13 @@ export default function JobDetailPage(): JSX.Element {
   const { data, isLoading } = useJobDetail(id);
   const profile = useProfileStore((state) => state.profile);
   const addApplication = useProfileStore((state) => state.addApplication);
-  const [scoreOverride, setScoreOverride] = useState(data?.score);
+  const [scoreOverride, setScoreOverride] = useState(data?.scoreRaw);
   const [verdictOverride, setVerdictOverride] = useState(data?.epIndicator);
   const [scoreDetails, setScoreDetails] = useState<CompassScore | undefined>(
-    data?.score && data.breakdown
+    data?.scoreRaw && data.breakdown
       ? {
           total: data.score,
+          totalRaw: data.scoreRaw,
           breakdown: data.breakdown,
           verdict: (data.epIndicator ?? 'Borderline') as CompassScore['verdict'],
           notes: data.rationale ?? []
@@ -42,12 +43,13 @@ export default function JobDetailPage(): JSX.Element {
   const [selectedHRContact, setSelectedHRContact] = useState<HRProspect | null>(null);
 
   useEffect(() => {
-    if (data?.score !== undefined) {
-      setScoreOverride(data.score);
+    if (data?.scoreRaw !== undefined) {
+      setScoreOverride(data.scoreRaw);
       setVerdictOverride(data.epIndicator);
       if (data.breakdown) {
         setScoreDetails({
           total: data.score,
+          totalRaw: data.scoreRaw,
           breakdown: data.breakdown,
           verdict: (data.epIndicator ?? 'Borderline') as CompassScore['verdict'],
           notes: data.rationale ?? []
@@ -65,7 +67,7 @@ export default function JobDetailPage(): JSX.Element {
         const result = await fetchExistingAssessment(id);
         setAssessmentReport(result);
         if (result.compass_score) {
-          setScoreOverride(result.compass_score.total);
+          setScoreOverride(result.compass_score.totalRaw);
           setVerdictOverride(result.compass_score.verdict);
           setScoreDetails(result.compass_score);
         }
@@ -144,7 +146,7 @@ export default function JobDetailPage(): JSX.Element {
       
       // Update COMPASS score with the recalculated score based on detailed JD
       if (result.compass_score) {
-        setScoreOverride(result.compass_score.total);
+        setScoreOverride(result.compass_score.totalRaw);
         setVerdictOverride(result.compass_score.verdict);
         setScoreDetails(result.compass_score);
       }
@@ -293,7 +295,7 @@ export default function JobDetailPage(): JSX.Element {
     }, 2000);
   };
 
-  const currentScore = scoreOverride ?? data.score ?? 0;
+  const currentScore = scoreOverride ?? data.scoreRaw ?? 0;
   const currentVerdict = (verdictOverride ?? data.epIndicator ?? 'Borderline') as CompassScore['verdict'];
 
   return (
