@@ -1,31 +1,59 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
 import JobCard from '../components/JobCard';
 import EmptyState from '../components/EmptyState';
+import MultiSelectDropdown from '../components/MultiSelectDropdown';
 import { useJobs } from '../hooks/useJobs';
+import { fetchJobFilters } from '../api/client';
+import { useProfileStore } from '../store/profile';
 
 interface Filters {
   search: string;
-  location: string;
-  industry: string;
-  minSalary: string;
+  tags: string[];
+  company: string[];
 }
 
 const defaultFilters: Filters = {
   search: '',
-  location: '',
-  industry: '',
-  minSalary: ''
+  tags: [],
+  company: []
 };
 
+const PAGE_SIZE = 50;
+
 export default function JobsListPage(): JSX.Element {
+  const navigate = useNavigate();
+  const profile = useProfileStore((state) => state.profile);
   const [filters, setFilters] = useState<Filters>(defaultFilters);
   const [appliedFilters, setAppliedFilters] = useState<Filters>(defaultFilters);
+  const [currentPage, setCurrentPage] = useState(1);
+  
+  // Redirect to assessment if no profile or no activated profile (not saved to DB)
+  useEffect(() => {
+    if (!profile || !profile.id || profile.id === 'local-user' || !profile.skills || profile.skills.length === 0) {
+      navigate('/assessment');
+    }
+  }, [profile, navigate]);
+  
+  // Fetch filter metadata
+  const { data: filterMetadata } = useQuery({
+    queryKey: ['job-filters'],
+    queryFn: fetchJobFilters
+  });
+  
   const { data, isLoading } = useJobs({
     search: appliedFilters.search,
-    location: appliedFilters.location,
-    industry: appliedFilters.industry,
-    minSalary: appliedFilters.minSalary ? Number.parseInt(appliedFilters.minSalary, 10) : undefined
+    tags: appliedFilters.tags.join(','),
+    company: appliedFilters.company.join(','),
+    page: currentPage,
+    pageSize: PAGE_SIZE
   });
+
+  // Reset to page 1 when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [appliedFilters]);
 
   const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -35,7 +63,12 @@ export default function JobsListPage(): JSX.Element {
   const handleReset = () => {
     setFilters(defaultFilters);
     setAppliedFilters(defaultFilters);
+    setCurrentPage(1);
   };
+
+  const totalPages = data?.totalPages || 0;
+  const showingStart = data?.items.length ? (currentPage - 1) * PAGE_SIZE + 1 : 0;
+  const showingEnd = data?.items.length ? showingStart + data.items.length - 1 : 0;
 
   return (
     <div className="mx-auto max-w-6xl px-6 py-12">
@@ -47,9 +80,9 @@ export default function JobsListPage(): JSX.Element {
       </div>
       <form
         onSubmit={handleSubmit}
-        className="grid gap-4 rounded-2xl border border-slate-200 bg-white p-6 shadow-card md:grid-cols-4"
+        className="grid gap-4 rounded-2xl border border-slate-200 bg-white p-6 shadow-card md:grid-cols-3"
       >
-        <div className="md:col-span-2">
+        <div className="md:col-span-1">
           <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500">Search</label>
           <input
             type="text"
@@ -59,43 +92,24 @@ export default function JobsListPage(): JSX.Element {
             className="mt-2 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
           />
         </div>
-        <div>
-          <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500">Location</label>
-          <select
-            value={filters.location}
-            onChange={(event) => setFilters((prev) => ({ ...prev, location: event.target.value }))}
-            className="mt-2 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-          >
-            <option value="">Any</option>
-            <option value="Singapore">Singapore</option>
-            <option value="Remote - Singapore">Remote - Singapore</option>
-            <option value="Singapore (Hybrid)">Singapore (Hybrid)</option>
-          </select>
-        </div>
-        <div>
-          <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500">Industry</label>
-          <select
-            value={filters.industry}
-            onChange={(event) => setFilters((prev) => ({ ...prev, industry: event.target.value }))}
-            className="mt-2 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-          >
-            <option value="">All</option>
-            <option value="Technology">Technology</option>
-            <option value="Product">Product</option>
-            <option value="Finance">Finance</option>
-          </select>
-        </div>
-        <div>
-          <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500">Min Salary (SGD)</label>
-          <input
-            type="number"
-            min={0}
-            value={filters.minSalary}
-            onChange={(event) => setFilters((prev) => ({ ...prev, minSalary: event.target.value }))}
-            className="mt-2 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-          />
-        </div>
-        <div className="flex items-end gap-3 md:col-span-2">
+        
+        <MultiSelectDropdown
+          label="Company"
+          options={filterMetadata?.companies || []}
+          selected={filters.company}
+          onChange={(selected) => setFilters((prev) => ({ ...prev, company: selected }))}
+          placeholder="All companies"
+        />
+        
+        <MultiSelectDropdown
+          label="Tags"
+          options={filterMetadata?.tags || []}
+          selected={filters.tags}
+          onChange={(selected) => setFilters((prev) => ({ ...prev, tags: selected }))}
+          placeholder="All tags"
+        />
+        
+        <div className="flex items-end gap-3 md:col-span-3">
           <button
             type="submit"
             className="inline-flex items-center rounded-lg bg-brand-600 px-5 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-brand-700"
@@ -105,7 +119,7 @@ export default function JobsListPage(): JSX.Element {
           <button
             type="button"
             onClick={handleReset}
-            className="text-sm font-medium text-slate-500 hover:text-brand-600"
+            className="inline-flex items-center rounded-lg border border-slate-300 bg-white px-5 py-2 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-50"
           >
             Reset
           </button>
@@ -124,6 +138,70 @@ export default function JobsListPage(): JSX.Element {
           <JobCard key={job.id} job={job} />
         ))}
       </div>
+
+      {/* Pagination Controls */}
+      {data && data.items.length > 0 && totalPages > 1 && (
+        <div className="mt-8 flex items-center justify-between border-t border-slate-200 pt-6">
+          <div className="text-sm text-slate-600">
+            Showing {showingStart}-{showingEnd} of {data.total} results
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
+              disabled={currentPage === 1}
+              className="inline-flex items-center rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <svg className="h-4 w-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+              </svg>
+              Previous
+            </button>
+            
+            <div className="flex items-center gap-1">
+              {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                let pageNum: number;
+                if (totalPages <= 5) {
+                  pageNum = i + 1;
+                } else if (currentPage <= 3) {
+                  pageNum = i + 1;
+                } else if (currentPage >= totalPages - 2) {
+                  pageNum = totalPages - 4 + i;
+                } else {
+                  pageNum = currentPage - 2 + i;
+                }
+                
+                return (
+                  <button
+                    key={pageNum}
+                    type="button"
+                    onClick={() => setCurrentPage(pageNum)}
+                    className={`inline-flex items-center justify-center rounded-lg px-3 py-2 text-sm font-medium transition min-w-[40px] ${
+                      currentPage === pageNum
+                        ? 'bg-brand-600 text-white shadow-sm'
+                        : 'border border-slate-300 bg-white text-slate-700 hover:bg-slate-50'
+                    }`}
+                  >
+                    {pageNum}
+                  </button>
+                );
+              })}
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))}
+              disabled={currentPage === totalPages}
+              className="inline-flex items-center rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              Next
+              <svg className="h-4 w-4 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+              </svg>
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

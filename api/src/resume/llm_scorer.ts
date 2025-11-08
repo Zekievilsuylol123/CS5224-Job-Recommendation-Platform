@@ -1,5 +1,6 @@
 import OpenAI from "openai";
 import fs from "node:fs";
+import path from "node:path";
 import { z } from "zod";
 import { zodTextFormat } from "openai/helpers/zod";
 import { toFile } from "openai/uploads";
@@ -9,8 +10,8 @@ const client = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
-const system_prompt = fs.readFileSync("resources\\llm_prompts\\profile_jd_score_system.txt", "utf8");
-var user_prompt = fs.readFileSync("resources\\llm_prompts\\profile_jd_score_user.txt", "utf8");
+const system_prompt = fs.readFileSync(path.join("resources", "llm_prompts", "profile_jd_score_system.txt"), "utf8");
+var user_prompt = fs.readFileSync(path.join("resources", "llm_prompts", "profile_jd_score_user.txt"), "utf8");
 
 export const ProfileSchema = z.object({
     candidate_name: z.string(),
