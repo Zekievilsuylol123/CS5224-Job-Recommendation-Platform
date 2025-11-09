@@ -11,10 +11,10 @@ export default function ApplicationsPage(): JSX.Element {
   const setApplications = useProfileStore((state) => state.setApplications);
   const [status, setStatus] = useState<'idle' | 'loading' | 'error'>('idle');
 
-  // Redirect to assessment if no profile or no activated profile (not saved to DB)
+  // Redirect to knowledge base if no profile (no longer use /assessment)
   useEffect(() => {
     if (!profile || !profile.id || profile.id === 'local-user' || !profile.skills || profile.skills.length === 0) {
-      navigate('/assessment');
+      navigate('/knowledge-base');
     }
   }, [profile, navigate]);
 
@@ -43,13 +43,13 @@ export default function ApplicationsPage(): JSX.Element {
       <div className="mx-auto max-w-5xl px-6 py-12">
         <EmptyState
           title="No profile yet"
-          description="Complete the assessment to start tracking your job applications."
+          description="Add your knowledge sources to start tracking your job applications."
           action={
             <Link
-              to="/assessment"
+              to="/knowledge-base"
               className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-brand-700"
             >
-              Start self-assessment
+              Go to Knowledge Base
             </Link>
           }
         />

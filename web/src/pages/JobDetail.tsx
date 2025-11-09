@@ -1,15 +1,22 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
+import { FileText, Download } from 'lucide-react';
+import ReactMarkdown from 'react-markdown';
+import rehypeRaw from 'rehype-raw';
+import toast from 'react-hot-toast';
 import BreakdownCards from '../components/BreakdownCards';
-import ProfileChips from '../components/ProfileChips';
-import ScoreGauge from '../components/ScoreGauge';
 import Modal from '../components/Modal';
-import { analyzeJobFit, createApplication, searchHRContacts, generateOutreachMessage, fetchExistingAssessment, type HRProspect, type JobAnalysisResponse } from '../api/client';
+import JobHeader from '../components/JobDetail/JobHeader';
+import ActionButtons from '../components/JobDetail/ActionButtons';
+import HRContactSection from '../components/JobDetail/HRContactSection';
+import FitAnalysisSidebar from '../components/JobDetail/FitAnalysisSidebar';
+import GeneratedMaterials from '../components/JobDetail/GeneratedMaterials';
+import { analyzeJobFit, createApplication, searchHRContacts, getCachedHRContacts, generateOutreachMessage, fetchExistingAssessment, generateResume, generateCoverLetter, fetchJobMaterials, updateMaterial, type HRProspect, type JobAnalysisResponse, type GeneratedMaterial } from '../api/client';
 import { useJobDetail } from '../hooks/useJobs';
 import { useProfileStore } from '../store/profile';
 import type { CompassScore } from '../types';
 
-type ModalType = 'apply' | 'hr' | 'assess' | 'report' | null;
+type ModalType = 'apply' | 'hr' | 'assess' | 'report' | 'materials' | null;
 
 export default function JobDetailPage(): JSX.Element {
   const { id } = useParams<{ id: string }>();
@@ -17,68 +24,115 @@ export default function JobDetailPage(): JSX.Element {
   const { data, isLoading } = useJobDetail(id);
   const profile = useProfileStore((state) => state.profile);
   const addApplication = useProfileStore((state) => state.addApplication);
-  const [scoreOverride, setScoreOverride] = useState(data?.scoreRaw);
-  const [verdictOverride, setVerdictOverride] = useState(data?.epIndicator);
-  const [scoreDetails, setScoreDetails] = useState<CompassScore | undefined>(
-    data?.scoreRaw && data.breakdown
-      ? {
-          total: data.score,
-          totalRaw: data.scoreRaw,
-          breakdown: data.breakdown,
-          verdict: (data.epIndicator ?? 'Borderline') as CompassScore['verdict'],
-          notes: data.rationale ?? []
-        }
-      : undefined
-  );
+  
+  // Don't show any default/cached score - only show after user requests analysis
+  const [scoreOverride, setScoreOverride] = useState<number | undefined>(undefined);
+  const [verdictOverride, setVerdictOverride] = useState<string | undefined>(undefined);
+  const [scoreDetails, setScoreDetails] = useState<CompassScore | undefined>(undefined);
   const [activeModal, setActiveModal] = useState<ModalType>(null);
-  const [status, setStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
-  const [statusMessage, setStatusMessage] = useState<string>('');
   const [applicationNotes, setApplicationNotes] = useState<string>('');
   const [hasApplied, setHasApplied] = useState(false);
   const [hrProspects, setHrProspects] = useState<HRProspect[]>([]);
   const [hrLoading, setHrLoading] = useState(false);
+  const [hrFetched, setHrFetched] = useState(false); // Track if we've attempted to fetch HR contacts
   const [assessmentReport, setAssessmentReport] = useState<JobAnalysisResponse | null>(null);
+  const [isAnalyzing, setIsAnalyzing] = useState(false); // Loading state for fit analysis
   const [outreachMessage, setOutreachMessage] = useState<{ subject: string; body: string } | null>(null);
   const [outreachLoading, setOutreachLoading] = useState(false);
   const [selectedHRContact, setSelectedHRContact] = useState<HRProspect | null>(null);
+  
+  // Material generation state
+  const [materials, setMaterials] = useState<GeneratedMaterial[]>([]);
+  const [generatingResume, setGeneratingResume] = useState(false);
+  const [generatingCoverLetter, setGeneratingCoverLetter] = useState(false);
+  const [materialsLoading, setMaterialsLoading] = useState(false);
+  const [materialViewMode, setMaterialViewMode] = useState<Record<string, 'raw' | 'preview'>>({});
+  const [editingMaterialId, setEditingMaterialId] = useState<string | null>(null);
+  const [editedContent, setEditedContent] = useState<string>('');
+  const [savingMaterial, setSavingMaterial] = useState(false);
 
+  // Remove automatic score population from data
+  // Score only shows after user requests analysis with LLM
   useEffect(() => {
-    if (data?.scoreRaw !== undefined) {
-      setScoreOverride(data.scoreRaw);
-      setVerdictOverride(data.epIndicator);
-      if (data.breakdown) {
-        setScoreDetails({
-          total: data.score,
-          totalRaw: data.scoreRaw,
-          breakdown: data.breakdown,
-          verdict: (data.epIndicator ?? 'Borderline') as CompassScore['verdict'],
-          notes: data.rationale ?? []
-        });
-      }
-    }
-  }, [data?.score, data?.epIndicator, data?.breakdown, data?.rationale]);
+    // No-op: do not auto-populate score from data
+  }, []);
 
-  // Fetch existing assessment on page load (without generating new one)
+  // Don't auto-fetch existing assessment (only load when user clicks "Assess Fit")
+  // Remove this effect to avoid showing cached score
   useEffect(() => {
-    const loadExistingAssessment = async () => {
+    // No-op: do not auto-load assessment
+  }, [id]);
+  
+  // Fetch existing materials
+  useEffect(() => {
+    const loadMaterials = async () => {
       if (!id) return;
       
       try {
-        const result = await fetchExistingAssessment(id);
-        setAssessmentReport(result);
-        if (result.compass_score) {
-          setScoreOverride(result.compass_score.totalRaw);
-          setVerdictOverride(result.compass_score.verdict);
-          setScoreDetails(result.compass_score);
-        }
+        const result = await fetchJobMaterials(id);
+        setMaterials(result.materials);
       } catch (error) {
-        // No existing assessment found - this is fine, user can generate one if needed
-        console.log('No existing assessment found');
+        console.log('No existing materials found');
       }
     };
 
-    loadExistingAssessment();
-  }, [id]);  if (!id) {
+    loadMaterials();
+  }, [id]);
+  
+  // Helper function to reload materials from database
+  const reloadMaterials = async () => {
+    if (!id) return;
+    try {
+      const result = await fetchJobMaterials(id);
+      setMaterials(result.materials);
+      console.log('Reloaded materials from database:', result.materials.length);
+    } catch (error) {
+      console.log('Failed to reload materials');
+    }
+  };
+  
+  // Remove automatic HR contacts loading - make it on-demand only
+  // useEffect removed - user must click "Find HR" button
+  
+  const handleGenerateResume = async () => {
+    if (!id) return;
+    setGeneratingResume(true);
+    try {
+      const { material } = await generateResume(id, { tone: 'professional' });
+      
+      // Reload materials from database to get accurate count
+      // (Backend now deletes old resumes before inserting new one)
+      await reloadMaterials();
+      
+      toast.success('Resume generated successfully! Click "View Materials" to see it.');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to generate resume');
+    } finally {
+      setGeneratingResume(false);
+    }
+  };
+  
+  const handleGenerateCoverLetter = async () => {
+    if (!id) return;
+    setGeneratingCoverLetter(true);
+    try {
+      const { material } = await generateCoverLetter(id, { tone: 'professional' });
+      
+      // Reload materials from database to get accurate count
+      // (Backend now deletes old cover letters before inserting new one)
+      await reloadMaterials();
+      
+      toast.success('Cover letter generated successfully! Click "View Materials" to see it.');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to generate cover letter');
+    } finally {
+      setGeneratingCoverLetter(false);
+    }
+  };
+  
+  const handleViewMaterials = () => {
+    setActiveModal('materials');
+  };  if (!id) {
     return (
       <div className="mx-auto max-w-4xl px-6 py-12">
         <p className="text-sm text-red-500">Job not found.</p>
@@ -129,7 +183,7 @@ export default function JobDetailPage(): JSX.Element {
 
   const handleAssessFit = async () => {
     if (!profile) {
-      navigate('/assessment');
+      navigate('/knowledge-base');
       return;
     }
     setActiveModal('assess');
@@ -138,8 +192,12 @@ export default function JobDetailPage(): JSX.Element {
   const handleConfirmAssess = async (regenerate = false) => {
     if (!profile || !id) return;
     
-    setStatus('loading');
-    setActiveModal(null);
+    // Don't close modal if regenerating - keep it open to show loading state
+    if (!regenerate) {
+      setActiveModal(null);
+    }
+    
+    setIsAnalyzing(true);
     try {
       const result = await analyzeJobFit(id, regenerate);
       setAssessmentReport(result);
@@ -151,16 +209,20 @@ export default function JobDetailPage(): JSX.Element {
         setScoreDetails(result.compass_score);
       }
       
-      setStatus('success');
-      setStatusMessage(result.from_cache && !regenerate 
+      toast.success(result.from_cache && !regenerate 
         ? 'Loaded existing assessment from database.' 
         : 'Fit assessment completed with detailed LLM analysis.');
       
       // Show the detailed report modal
       setActiveModal('report');
     } catch (error) {
-      setStatus('error');
-      setStatusMessage(error instanceof Error ? error.message : 'Unable to assess fit.');
+      toast.error(error instanceof Error ? error.message : 'Unable to assess fit.');
+      // If regenerate failed, close the modal
+      if (regenerate) {
+        setActiveModal(null);
+      }
+    } finally {
+      setIsAnalyzing(false);
     }
   };
 
@@ -181,7 +243,7 @@ export default function JobDetailPage(): JSX.Element {
 
   const handleConfirmApplication = async () => {
     if (!profile) {
-      navigate('/assessment');
+      navigate('/knowledge-base');
       return;
     }
     
@@ -198,60 +260,17 @@ export default function JobDetailPage(): JSX.Element {
       });
       addApplication(application);
       setHasApplied(true);
-      setStatus('success');
-      setStatusMessage('Application recorded! Track it in Applications.');
+      toast.success('Application recorded! Track it in Applications.');
       setActiveModal(null);
       setApplicationNotes('');
     } catch (error) {
-      setStatus('error');
-      setStatusMessage(error instanceof Error ? error.message : 'Unable to record application.');
-    }
-  };
-
-  const handleContactHR = async () => {
-    if (!profile) {
-      navigate('/assessment');
-      return;
-    }
-    
-    // Check if this is an InternSG company (smaller company)
-    if (data.isInternSG) {
-      setActiveModal('hr');
-      setHrLoading(false);
-      setHrProspects([]); // No prospects for InternSG
-      return;
-    }
-    
-    setHrLoading(true);
-    setActiveModal('hr');
-    
-    try {
-      // Extract domain from company name or use a default
-      // In a real scenario, you'd have the company website URL
-      const companyDomain = `${data.company.toLowerCase().replace(/\s+/g, '')}.com`;
-      
-      const result = await searchHRContacts({
-        company_domain: companyDomain,
-        fetch_count: 3
-      });
-      
-      setHrProspects(result.prospects);
-      setHrLoading(false);
-    } catch (error) {
-      console.error('Failed to fetch HR contacts:', error);
-      setHrProspects([]);
-      setHrLoading(false);
+      toast.error(error instanceof Error ? error.message : 'Unable to record application.');
     }
   };
 
   const handleCopyEmail = (email: string) => {
     navigator.clipboard.writeText(email);
-    setStatus('success');
-    setStatusMessage('Email copied to clipboard!');
-    setTimeout(() => {
-      setStatus('idle');
-      setStatusMessage('');
-    }, 2000);
+    toast.success('Email copied to clipboard!');
   };
 
   const handleGenerateOutreach = async (hrContact: HRProspect) => {
@@ -272,13 +291,114 @@ export default function JobDetailPage(): JSX.Element {
       });
       
       setOutreachMessage(message);
-      setStatus('success');
-      setStatusMessage('Outreach message generated!');
+      toast.success('Outreach message generated!');
     } catch (error) {
-      setStatus('error');
-      setStatusMessage(error instanceof Error ? error.message : 'Failed to generate message');
+      toast.error(error instanceof Error ? error.message : 'Failed to generate message');
     } finally {
       setOutreachLoading(false);
+    }
+  };
+
+  const handleGenerateGenericOutreach = async () => {
+    if (!data) return;
+    
+    setSelectedHRContact(null); // No specific HR contact
+    setOutreachLoading(true);
+    setOutreachMessage(null);
+    
+    try {
+      const message = await generateOutreachMessage({
+        job_external_id: data.id,
+        job_title: data.title,
+        job_company: data.company,
+        // Use actual HR name from InternSG if available, otherwise use placeholder
+        hr_name: data.hrName || '[HR Name]',
+        hr_email: undefined,
+        hr_job_title: '[HR Title]'
+      });
+      
+      setOutreachMessage(message);
+      if (data.hrName) {
+        toast.success(`Outreach message generated for ${data.hrName}!`);
+      } else {
+        toast.success('Generic outreach template generated! Fill in HR details after finding contact.');
+      }
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to generate message');
+    } finally {
+      setOutreachLoading(false);
+    }
+  };
+
+  // New: unified HR contact finder - checks cache first, then searches if needed
+  const handleFindHR = async () => {
+    if (!data) return;
+    
+    setHrLoading(true);
+    setHrFetched(true); // Mark that we've attempted fetch
+    
+    try {
+      const companyDomain = `${data.company.toLowerCase().replace(/\s+/g, '')}.com`;
+      
+      // Step 1: Check cache first
+      console.log('Checking cache for:', companyDomain);
+      const cachedResult = await getCachedHRContacts(companyDomain);
+      console.log('Cache result:', cachedResult);
+      
+      if (cachedResult.prospects && cachedResult.prospects.length > 0) {
+        // Found in cache!
+        setHrProspects(cachedResult.prospects);
+        toast.success('HR contacts loaded from cache!');
+        setHrLoading(false);
+        return;
+      }
+      
+      // Step 2: Not in cache, search external API
+      console.log('Not in cache, searching external API...');
+      const searchResult = await searchHRContacts({
+        company_domain: companyDomain,
+        fetch_count: 3
+      });
+      console.log('Search result:', searchResult);
+      
+      setHrProspects(searchResult.prospects);
+      
+      if (searchResult.prospects.length > 0) {
+        toast.success('HR contacts found and cached!');
+      } else {
+        // No results found even after search - no toast needed, UI will show "No HR Contacts Found"
+      }
+    } catch (error) {
+      console.error('Error in handleFindHR:', error);
+      // Don't add "Failed to search HR prospects:" prefix again since the API already includes it
+      toast.error(
+        error instanceof Error 
+          ? error.message
+          : 'Failed to search for HR contacts'
+      );
+      setHrProspects([]);
+    } finally {
+      setHrLoading(false);
+    }
+  };
+
+  const handleSearchHRContacts = async () => {
+    if (!data) return;
+    
+    setHrLoading(true);
+    try {
+      const companyDomain = `${data.company.toLowerCase().replace(/\s+/g, '')}.com`;
+      const result = await searchHRContacts({
+        company_domain: companyDomain,
+        fetch_count: 3
+      });
+      setHrProspects(result.prospects);
+      toast.success('HR contacts found and cached!');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to search for HR contacts');
+      setHrProspects([]);
+    } finally {
+      setHrLoading(false);
     }
   };
 
@@ -287,12 +407,42 @@ export default function JobDetailPage(): JSX.Element {
     
     const fullMessage = `Subject: ${outreachMessage.subject}\n\n${outreachMessage.body}`;
     navigator.clipboard.writeText(fullMessage);
-    setStatus('success');
-    setStatusMessage('Message copied to clipboard!');
-    setTimeout(() => {
-      setStatus('idle');
-      setStatusMessage('');
-    }, 2000);
+    toast.success('Message copied to clipboard!');
+  };
+
+  const handleEditMaterial = (materialId: string, currentContent: string) => {
+    setEditingMaterialId(materialId);
+    setEditedContent(currentContent);
+  };
+
+  const handleCancelEdit = () => {
+    setEditingMaterialId(null);
+    setEditedContent('');
+  };
+
+  const handleSaveMaterial = async (materialId: string) => {
+    if (!editedContent.trim()) {
+      toast.error('Content cannot be empty');
+      return;
+    }
+
+    setSavingMaterial(true);
+    try {
+      const { material } = await updateMaterial(materialId, editedContent);
+      
+      // Update materials list with the new content
+      setMaterials(prev => 
+        prev.map(m => m.id === materialId ? material : m)
+      );
+      
+      setEditingMaterialId(null);
+      setEditedContent('');
+      toast.success('Material updated successfully!');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to update material');
+    } finally {
+      setSavingMaterial(false);
+    }
   };
 
   const currentScore = scoreOverride ?? data.scoreRaw ?? 0;
@@ -353,7 +503,7 @@ export default function JobDetailPage(): JSX.Element {
         }
         onClose={() => {
           setActiveModal(null);
-          setHrProspects([]);
+          // Don't reset hrProspects - keep them for the main page display
           setOutreachMessage(null);
           setSelectedHRContact(null);
         }}
@@ -511,6 +661,215 @@ export default function JobDetailPage(): JSX.Element {
         </div>
       </Modal>
 
+      {/* Materials Modal */}
+      <Modal
+        open={activeModal === 'materials'}
+        title="Application Materials"
+        description={`${materials.length} generated ${materials.length === 1 ? 'document' : 'documents'} for this position`}
+        onClose={() => {
+          setActiveModal(null);
+          handleCancelEdit(); // Cancel any ongoing edits when closing modal
+        }}
+        fullScreen={true}
+      >
+        <div className="space-y-4">
+          {materials.length === 0 ? (
+            <div className="rounded-lg bg-slate-50 border border-slate-200 p-6 text-center">
+              <p className="text-sm text-slate-600">No materials generated yet.</p>
+              <p className="text-xs text-slate-500 mt-2">Use the buttons on the job page to generate a resume or cover letter.</p>
+            </div>
+          ) : (
+            materials.map((material) => {
+              const viewMode = materialViewMode[material.id] || 'preview';
+              const isEditing = editingMaterialId === material.id;
+              
+              return (
+                <div key={material.id} className="rounded-lg border border-slate-200 bg-white p-6">
+                  <div className="flex items-start justify-between mb-4">
+                    <div className="flex items-center gap-3">
+                      <div className={`p-2 rounded-lg ${
+                        material.material_type === 'resume' 
+                          ? 'bg-indigo-100 text-indigo-700' 
+                          : 'bg-purple-100 text-purple-700'
+                      }`}>
+                        <FileText className="h-5 w-5" />
+                      </div>
+                      <div>
+                        <h4 className="font-semibold text-slate-900 capitalize">
+                          {material.material_type.replace('_', ' ')}
+                        </h4>
+                        <p className="text-xs text-slate-500">
+                          Generated {new Date(material.created_at).toLocaleDateString()} at{' '}
+                          {new Date(material.created_at).toLocaleTimeString()}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {!isEditing && (
+                        <>
+                          {/* View Mode Toggle */}
+                          <div className="flex items-center gap-1 rounded-md bg-slate-100 p-1">
+                            <button
+                              onClick={() => setMaterialViewMode(prev => ({ ...prev, [material.id]: 'preview' }))}
+                              className={`px-2 py-1 text-xs font-medium rounded transition ${
+                                viewMode === 'preview'
+                                  ? 'bg-white text-slate-900 shadow-sm'
+                                  : 'text-slate-600 hover:text-slate-900'
+                              }`}
+                            >
+                              Preview
+                            </button>
+                            <button
+                              onClick={() => setMaterialViewMode(prev => ({ ...prev, [material.id]: 'raw' }))}
+                              className={`px-2 py-1 text-xs font-medium rounded transition ${
+                                viewMode === 'raw'
+                                  ? 'bg-white text-slate-900 shadow-sm'
+                                  : 'text-slate-600 hover:text-slate-900'
+                              }`}
+                            >
+                              Raw
+                            </button>
+                          </div>
+                          <button
+                            onClick={() => handleEditMaterial(material.id, material.content)}
+                            className="inline-flex items-center gap-1 rounded-md bg-blue-100 px-3 py-1.5 text-xs font-medium text-blue-700 hover:bg-blue-200 transition"
+                          >
+                            <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                            </svg>
+                            Edit
+                          </button>
+                          <button
+                            onClick={() => {
+                              navigator.clipboard.writeText(material.content);
+                              toast.success('Content copied to clipboard!');
+                            }}
+                            className="inline-flex items-center gap-1 rounded-md bg-slate-100 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-200 transition"
+                          >
+                            <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                            </svg>
+                            Copy
+                          </button>
+                        </>
+                      )}
+                      {isEditing && (
+                        <>
+                          <button
+                            onClick={handleCancelEdit}
+                            disabled={savingMaterial}
+                            className="inline-flex items-center gap-1 rounded-md bg-slate-100 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-200 transition disabled:opacity-50"
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            onClick={() => handleSaveMaterial(material.id)}
+                            disabled={savingMaterial}
+                            className="inline-flex items-center gap-1 rounded-md bg-green-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-green-700 transition disabled:opacity-50"
+                          >
+                            <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                            </svg>
+                            {savingMaterial ? 'Saving...' : 'Save'}
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                  
+                  <div className="rounded-md border border-slate-200 bg-slate-50 p-6 max-h-[60vh] overflow-y-auto">
+                    {isEditing ? (
+                      <textarea
+                        value={editedContent}
+                        onChange={(e) => setEditedContent(e.target.value)}
+                        className="w-full min-h-[500px] p-3 text-sm text-slate-700 font-mono border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-y"
+                        placeholder="Edit your material here..."
+                      />
+                    ) : viewMode === 'preview' ? (
+                      <div className="markdown-preview">
+                        <ReactMarkdown
+                          rehypePlugins={[rehypeRaw]}
+                          components={{
+                            h1(props) {
+                              const {node, ...rest} = props
+                              return <h1 className="text-2xl font-bold mb-4 pb-2 border-b border-slate-300 text-slate-900" {...rest} />
+                            },
+                            h2(props) {
+                              const {node, ...rest} = props
+                              return <h2 className="text-xl font-semibold mt-6 mb-3 text-slate-900" {...rest} />
+                            },
+                            h3(props) {
+                              const {node, ...rest} = props
+                              return <h3 className="text-lg font-semibold mt-4 mb-2 text-slate-800" {...rest} />
+                            },
+                            p(props) {
+                              const {node, ...rest} = props
+                              return <p className="mb-4 leading-relaxed text-slate-700 whitespace-pre-wrap break-words" {...rest} />
+                            },
+                            strong(props) {
+                              const {node, ...rest} = props
+                              return <strong className="font-bold text-slate-900" {...rest} />
+                            },
+                            em(props) {
+                              const {node, ...rest} = props
+                              return <em className="italic text-slate-700" {...rest} />
+                            },
+                            mark(props) {
+                              const {node, ...rest} = props
+                              return <mark className="bg-yellow-200 px-0.5 rounded" {...rest} />
+                            },
+                            ul(props) {
+                              const {node, ...rest} = props
+                              return <ul className="list-disc ml-6 my-4 space-y-2" {...rest} />
+                            },
+                            ol(props) {
+                              const {node, ...rest} = props
+                              return <ol className="list-decimal ml-6 my-4 space-y-2" {...rest} />
+                            },
+                            li(props) {
+                              const {node, ...rest} = props
+                              return <li className="text-slate-700 leading-relaxed" {...rest} />
+                            },
+                            a(props) {
+                              const {node, ...rest} = props
+                              return <a className="text-blue-600 hover:underline break-words" {...rest} />
+                            },
+                            code(props) {
+                              const {node, ...rest} = props
+                              return <code className="bg-slate-200 px-1.5 py-0.5 rounded text-sm font-mono text-slate-800" {...rest} />
+                            },
+                            blockquote(props) {
+                              const {node, ...rest} = props
+                              return <blockquote className="border-l-4 border-slate-300 pl-4 italic text-slate-600 my-4" {...rest} />
+                            },
+                            hr(props) {
+                              const {node, ...rest} = props
+                              return <hr className="my-6 border-slate-300" {...rest} />
+                            },
+                          }}
+                        >
+                          {material.content.replace(/^```markdown\n?/, '').replace(/\n?```$/, '')}
+                        </ReactMarkdown>
+                      </div>
+                    ) : (
+                      <pre className="text-sm text-slate-700 whitespace-pre-wrap break-words font-mono leading-relaxed">
+                        {material.content}
+                      </pre>
+                    )}
+                  </div>
+                  
+                  {material.metadata && !isEditing && (
+                    <div className="mt-3 text-xs text-slate-500">
+                      <span className="font-semibold">Tone:</span> {material.metadata.tone || 'Professional'}
+                    </div>
+                  )}
+                </div>
+              );
+            })
+          )}
+        </div>
+      </Modal>
+
       <Modal
         open={activeModal === 'assess'}
         title="Assess Fit with LLM"
@@ -561,25 +920,24 @@ export default function JobDetailPage(): JSX.Element {
             <div className="flex items-center gap-2">
               {assessmentReport?.from_cache && (
                 <span className="text-xs text-slate-500 italic">
-                  📋 Loaded from previous analysis
+                  Loaded from previous analysis
                 </span>
               )}
             </div>
             <div className="flex gap-2">
               <button
                 type="button"
-                onClick={() => {
-                  setActiveModal(null);
-                  handleConfirmAssess(true);
-                }}
-                className="rounded-lg border border-brand-600 bg-white px-4 py-2 text-sm font-medium text-brand-600 hover:bg-brand-50"
+                onClick={() => handleConfirmAssess(true)}
+                disabled={isAnalyzing}
+                className="rounded-lg border border-brand-600 bg-white px-4 py-2 text-sm font-medium text-brand-600 hover:bg-brand-50 disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                🔄 Regenerate
+                {isAnalyzing ? 'Regenerating...' : 'Regenerate'}
               </button>
               <button
                 type="button"
                 onClick={() => setActiveModal(null)}
-                className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700"
+                disabled={isAnalyzing}
+                className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Close
               </button>
@@ -587,6 +945,15 @@ export default function JobDetailPage(): JSX.Element {
           </div>
         }
       >
+        {isAnalyzing && (
+          <div className="absolute inset-0 bg-white/80 backdrop-blur-sm flex items-center justify-center z-50 rounded-lg">
+            <div className="text-center">
+              <div className="inline-block animate-spin rounded-full h-12 w-12 border-4 border-brand-200 border-t-brand-600 mb-4"></div>
+              <p className="text-sm font-medium text-slate-900">Regenerating assessment...</p>
+              <p className="text-xs text-slate-500 mt-1">This may take a few moments</p>
+            </div>
+          </div>
+        )}
         {assessmentReport && (
           <div className="space-y-6 max-h-[70vh] overflow-y-auto">
             {/* Overall Score & Decision */}
@@ -763,7 +1130,7 @@ export default function JobDetailPage(): JSX.Element {
             {assessmentReport.recommendations_to_candidate.length > 0 && (
               <div>
                 <h4 className="text-sm font-semibold uppercase tracking-wide text-slate-500 mb-3">
-                  💡 Recommendations for You
+                  Recommendations for You
                 </h4>
                 <div className="rounded-lg border border-brand-200 bg-brand-50 p-4">
                   <ul className="space-y-2">
@@ -784,7 +1151,7 @@ export default function JobDetailPage(): JSX.Element {
             {assessmentReport.questions_for_interview.length > 0 && (
               <div>
                 <h4 className="text-sm font-semibold uppercase tracking-wide text-slate-500 mb-3">
-                  🎯 Suggested Interview Questions
+                  Suggested Interview Questions
                 </h4>
                 <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
                   <p className="text-xs text-slate-500 mb-3">Questions the hiring manager might ask based on your profile:</p>
@@ -813,17 +1180,67 @@ export default function JobDetailPage(): JSX.Element {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Main Content - Takes 2 columns on desktop */}
         <div className="lg:col-span-2 space-y-6">
+          {/* Job Header */}
+          <JobHeader
+            title={data.title}
+            company={data.company}
+            location={data.location}
+            tags={[data.industry]}
+            salary={data.salaryMinSGD && data.salaryMaxSGD ? `SGD ${data.salaryMinSGD.toLocaleString()} - ${data.salaryMaxSGD.toLocaleString()}` : undefined}
+            postedDate={data.createdAt}
+            isInternSG={data.isInternSG}
+          />
+
+          {/* Action Buttons */}
+          <ActionButtons
+            hasApplied={hasApplied}
+            onApply={handleOpenExternalLink}
+            onCheckFit={handleAssessFit}
+            onViewFit={() => setActiveModal('report')}
+            isAnalyzing={isAnalyzing}
+            hasAssessment={!!assessmentReport}
+          />
+
+          {/* Generated Materials */}
+          <GeneratedMaterials
+            materials={materials}
+            onGenerateResume={handleGenerateResume}
+            onGenerateCoverLetter={handleGenerateCoverLetter}
+            onViewMaterials={handleViewMaterials}
+            isGeneratingResume={generatingResume}
+            isGeneratingCoverLetter={generatingCoverLetter}
+          />
+
+          {/* HR Contact Section */}
+          <HRContactSection
+            companyName={data.company}
+            isInternSG={data.isInternSG}
+            hrName={data.hrName}
+            hrLoading={hrLoading}
+            hrProspects={hrProspects}
+            hrFetched={hrFetched}
+            outreachLoading={outreachLoading}
+            outreachMessage={outreachMessage}
+            selectedHRContact={selectedHRContact}
+            onFindHR={handleFindHR}
+            onSearchLinkedIn={() => {
+              // Prioritize HR name in search query if available (InternSG jobs)
+              const searchQuery = data.hrName
+                ? `site:linkedin.com/in/ "${data.hrName}" ${data.company} singapore`
+                : `site:linkedin.com/in/ ${data.company} (hr OR "hiring manager" OR "talent acquisition" OR recruiter) singapore`;
+              const googleSearchUrl = `https://www.google.com/search?q=${encodeURIComponent(searchQuery)}`;
+              window.open(googleSearchUrl, '_blank');
+            }}
+            onCopyEmail={handleCopyEmail}
+            onGenerateOutreach={handleGenerateOutreach}
+            onGenerateGenericOutreach={handleGenerateGenericOutreach}
+            onCopyOutreachMessage={handleCopyOutreachMessage}
+            onViewAllContacts={() => setActiveModal('hr')}
+          />
+
+          {/* Job Description */}
           <div className="rounded-3xl border border-slate-200 bg-white p-8 shadow-card">
-            <div className="flex flex-wrap items-start justify-between gap-4">
-              <div>
-                <p className="text-sm uppercase tracking-wide text-slate-500">{data.company}</p>
-                <h1 className="text-3xl font-semibold text-slate-900">{data.title}</h1>
-                <p className="mt-2 text-sm text-slate-500">
-                  {data.location} · {data.industry}
-                </p>
-              </div>
-              <ScoreGauge value={currentScore} verdict={currentVerdict} />
-            </div>
+            <h3 className="text-lg font-semibold text-slate-900 mb-4">Job Description</h3>
             <div 
               className="mt-6 text-sm leading-relaxed text-slate-600"
               dangerouslySetInnerHTML={{ 
@@ -842,186 +1259,24 @@ export default function JobDetailPage(): JSX.Element {
               }}
             />
           </div>
-
-          <div className="rounded-3xl border border-slate-200 bg-white p-8 shadow-card">
-            <div className="flex flex-col gap-4 md:flex-row md:items-center md:gap-3">
-              <button
-                type="button"
-                onClick={assessmentReport ? () => setActiveModal('report') : handleAssessFit}
-                disabled={status === 'loading'}
-                className="rounded-lg bg-brand-600 px-5 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-brand-700 disabled:opacity-60 disabled:cursor-not-allowed"
-              >
-                {status === 'loading' 
-                  ? 'Analyzing...' 
-                  : assessmentReport 
-                    ? 'View Assessment Report' 
-                    : 'Assess fit with my profile'}
-              </button>
-              <button
-                type="button"
-                onClick={handleContactHR}
-                disabled={status === 'loading'}
-                className="rounded-lg border border-slate-200 px-5 py-2 text-sm font-semibold text-slate-600 shadow-sm transition hover:border-slate-300 hover:bg-slate-50 hover:text-slate-700 disabled:opacity-60 disabled:cursor-not-allowed"
-              >
-                Contact HR
-              </button>
-              <button
-                type="button"
-                onClick={handleOpenExternalLink}
-                disabled={hasApplied}
-                className="inline-flex items-center justify-center rounded-lg border border-brand-200 px-5 py-2 text-sm font-semibold text-brand-600 hover:border-brand-400 hover:text-brand-700 disabled:opacity-60 disabled:cursor-not-allowed"
-              >
-                {hasApplied ? (
-                  <>
-                    <svg className="mr-2 h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
-                      <path fillRule="evenodd" d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z" clipRule="evenodd" />
-                    </svg>
-                    Applied
-                  </>
-                ) : (
-                  <>
-                    <svg className="mr-2 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                    </svg>
-                    Apply Now
-                  </>
-                )}
-              </button>
-            </div>
-            {status === 'loading' && <p className="mt-4 text-sm text-slate-500">Processing your request...</p>}
-            {status === 'success' && (
-              <div className="mt-4 rounded-lg bg-green-50 border border-green-200 px-4 py-3">
-                <p className="text-sm text-green-800">{statusMessage}</p>
-              </div>
-            )}
-            {status === 'error' && (
-              <div className="mt-4 rounded-lg bg-red-50 border border-red-200 px-4 py-3">
-                <p className="text-sm text-red-800">{statusMessage}</p>
-              </div>
-            )}
-          </div>
-
-          <div className="space-y-6">
-            <BreakdownCards score={scoreDetails} />
-            <div className="rounded-3xl border border-slate-200 bg-white p-6">
-              <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-500">EP Rationale</h3>
-              <ul className="mt-4 space-y-2 text-sm text-slate-600">
-                {(scoreDetails?.notes ?? data.rationale ?? []).map((item) => (
-                  <li key={item}>- {item}</li>
-                ))}
-                {(scoreDetails?.notes ?? data.rationale ?? []).length === 0 && <li>No rationale provided.</li>}
-              </ul>
-            </div>
-          </div>
         </div>
         
-        {/* Sidebar - Profile & Assessment - Takes 1 column on desktop */}
+        {/* Sidebar - Assessment Summary - Takes 1 column on desktop */}
         <div className="lg:col-span-1 space-y-6">
-          {/* Profile Snapshot */}
-          <ProfileChips profile={profile} title="Your Profile Snapshot" />
-          
-          {/* Tips Card - Only shows when no assessment */}
-          {data && !assessmentReport && (
-            <div className="rounded-2xl border border-slate-200 bg-white p-5">
-              <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Keep improving</h3>
-              <ul className="mt-3 space-y-2 text-sm text-slate-600">
-                <li>- Update your profile after tweaking your resume.</li>
-                <li>- Save tips and integrate them before re-assessment.</li>
-                <li>- Track mock applications from the top navigation.</li>
-              </ul>
-            </div>
-          )}
-          
-          {/* Assessment Report Summary - Shows when available */}
+          {/* Job Fit Analysis - Shows when available */}
           {assessmentReport && (
-              <div className="rounded-2xl border border-brand-200 bg-gradient-to-br from-brand-50 to-blue-50 p-6">
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-sm font-semibold uppercase tracking-wide text-brand-700">
-                    📊 Detailed Assessment Available
-                  </h3>
-                  {assessmentReport.from_cache && (
-                    <span className="text-xs bg-white rounded-full px-2 py-1 text-slate-600 border border-slate-200">
-                      Cached
-                    </span>
-                  )}
-                </div>
-                
-                <div className="space-y-4">
-                  <div className="flex items-center gap-4">
-                    <div className="flex-shrink-0">
-                      <div className="text-4xl font-bold text-brand-600">
-                        {assessmentReport.overall_score}
-                      </div>
-                      <div className="text-xs text-slate-600 text-center">/ 100</div>
-                    </div>
-                    <div className="flex-1">
-                      <div className={`inline-flex items-center rounded-full px-3 py-1 text-sm font-semibold ${
-                        assessmentReport.decision === 'strong_match' ? 'bg-green-100 text-green-800' :
-                        assessmentReport.decision === 'possible_match' ? 'bg-yellow-100 text-yellow-800' :
-                        assessmentReport.decision === 'weak_match' ? 'bg-orange-100 text-orange-800' :
-                        'bg-red-100 text-red-800'
-                      }`}>
-                        {assessmentReport.decision.replace('_', ' ').toUpperCase()}
-                      </div>
-                      <div className="mt-2">
-                        <div className="text-xs text-slate-500 mb-1">Must-Have Coverage</div>
-                        <div className="flex items-center gap-2">
-                          <div className="flex-1 bg-white rounded-full h-2 overflow-hidden">
-                            <div 
-                              className="bg-brand-600 h-full rounded-full transition-all"
-                              style={{ width: `${assessmentReport.must_have_coverage * 100}%` }}
-                            />
-                          </div>
-                          <span className="text-xs font-semibold text-brand-700">
-                            {Math.round(assessmentReport.must_have_coverage * 100)}%
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="pt-4 border-t border-brand-200">
-                    <div className="text-xs text-slate-600 mb-2">Quick Stats:</div>
-                    <div className="grid grid-cols-2 gap-2 text-xs">
-                      <div className="bg-white rounded-lg px-3 py-2 border border-slate-200">
-                        <div className="text-slate-500">Matched Must-Haves</div>
-                        <div className="font-semibold text-green-700">
-                          {assessmentReport.evidence.matched_must_haves.length}
-                        </div>
-                      </div>
-                      <div className="bg-white rounded-lg px-3 py-2 border border-slate-200">
-                        <div className="text-slate-500">Missing Must-Haves</div>
-                        <div className="font-semibold text-red-700">
-                          {assessmentReport.gaps.missing_must_haves.length}
-                        </div>
-                      </div>
-                      <div className="bg-white rounded-lg px-3 py-2 border border-slate-200">
-                        <div className="text-slate-500">Recommendations</div>
-                        <div className="font-semibold text-brand-700">
-                          {assessmentReport.recommendations_to_candidate.length}
-                        </div>
-                      </div>
-                      <div className="bg-white rounded-lg px-3 py-2 border border-slate-200">
-                        <div className="text-slate-500">Interview Questions</div>
-                        <div className="font-semibold text-purple-700">
-                          {assessmentReport.questions_for_interview.length}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  <button
-                    onClick={() => setActiveModal('report')}
-                    className="w-full rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-brand-700 transition flex items-center justify-center gap-2"
-                  >
-                    <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                    </svg>
-                    View Full Report
-                  </button>
-                </div>
-              </div>
-            )}
+            <FitAnalysisSidebar
+              assessmentReport={assessmentReport}
+              scoreDetails={scoreDetails}
+              onViewFullReport={() => setActiveModal('report')}
+              onHide={() => {
+                setAssessmentReport(null);
+                setScoreDetails(undefined);
+                setScoreOverride(undefined);
+                setVerdictOverride(undefined);
+              }}
+            />
+          )}
         </div>
       </div>
     </div>

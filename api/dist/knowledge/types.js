@@ -1,0 +1,2 @@
+// Knowledge Base Types
+export {};
