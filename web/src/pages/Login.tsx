@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { useAuthStore } from '../store/auth';
 
 export default function LoginPage(): JSX.Element {
@@ -7,9 +7,9 @@ export default function LoginPage(): JSX.Element {
   const { user, signInWithGoogle, loading } = useAuthStore();
 
   useEffect(() => {
-    // Redirect to assessment for onboarding if already logged in
+    // Redirect to knowledge base / dashboard for logged-in users
     if (user) {
-      navigate('/assessment');
+      navigate('/knowledge-base');
     }
   }, [user, navigate]);
 
@@ -26,9 +26,12 @@ export default function LoginPage(): JSX.Element {
     <div className="min-h-screen flex items-center justify-center bg-slate-50">
       <div className="max-w-md w-full space-y-8 p-8 bg-white rounded-lg shadow-lg">
         <div className="text-center">
-          <h1 className="text-3xl font-bold text-brand-600">EP-Aware Jobs</h1>
+          <h1 className="text-3xl font-bold text-brand-600">CTO</h1>
           <p className="mt-2 text-sm text-slate-600">
-            Sign in to access your personalized job recommendations
+            Your Personal Chief Talent Officer
+          </p>
+          <p className="mt-3 text-xs text-slate-500">
+            Sign in to access context-aware job matching and personalized career materials
           </p>
         </div>
 
@@ -63,7 +66,16 @@ export default function LoginPage(): JSX.Element {
         </div>
 
         <div className="mt-6 text-center text-xs text-slate-500">
-          <p>By signing in, you agree to our Terms of Service and Privacy Policy</p>
+          <p>
+            By signing in, you agree to our{' '}
+            <Link to="/terms" className="text-brand-600 hover:text-brand-700 underline">
+              Terms of Service
+            </Link>
+            {' '}and{' '}
+            <Link to="/privacy" className="text-brand-600 hover:text-brand-700 underline">
+              Privacy Policy
+            </Link>
+          </p>
         </div>
       </div>
     </div>
