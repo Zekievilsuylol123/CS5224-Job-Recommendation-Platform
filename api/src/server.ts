@@ -24,6 +24,7 @@ import { supabaseAdmin } from './supabase.js';
 import { fetchExternalJobs, filterJobs } from './jobs/external.js';
 import { getMatchingJD } from './jobs/mockJDs.js';
 import { fetchJobDescription, isInternSGCompany } from './jobs/jdFetcher.js';
+import 'dotenv/config';
 
 // Import new knowledge base routes
 import knowledgeBaseRoutes from './routes/knowledgeBase.js';
@@ -205,6 +206,13 @@ function extractUser(input: Partial<User>): Partial<User> {
 
 export async function buildServer(): Promise<express.Express> {
   const app = express();
+  app.use(cors({
+      origin: [
+        process.env.WEB_ORIGIN ?? 'http://localhost:5173',
+        'http://127.0.0.1:5173'
+      ],
+      credentials: true
+    }));
   const storage: StorageAdapter = await createStorage();
 
   app.use(
