@@ -56,8 +56,6 @@ FROM nginx:alpine AS web-prod
 WORKDIR /usr/share/nginx/html
 COPY --from=web-build /app/web/dist ./
 
-# 这个 nginx.conf 里把 /api 反代到容器名 "api:8080"
-# 若你本机单跑 web 容器、后端裸机 8080，请改为 host.docker.internal:8080
 COPY web/nginx.conf /etc/nginx/conf.d/default.conf
 
 EXPOSE 80
