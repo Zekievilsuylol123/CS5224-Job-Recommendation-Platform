@@ -1,3 +1,4 @@
+import { supabaseAdmin } from './supabase.js';
 /**
  * Search for HR/recruiter contacts at a specific company
  * @param companyDomain - Company website domain (e.g., "okx.com" or "https://okx.com/")
@@ -20,7 +21,7 @@ export async function searchHRProspects(companyDomain, fetchCount = 2) {
         company_keywords: [],
         company_not_industry: [],
         company_not_keywords: [],
-        contact_job_title: ['hr', 'human resource', 'talent acquisition', 'recruiter'],
+        contact_job_title: ['hr', 'human resource', 'talent acquisition', 'recruiter', 'hiring manager'],
         contact_location: ['singapore'],
         contact_not_job_title: ['product manager'],
         contact_not_location: ['united states'],
@@ -69,11 +70,11 @@ export async function searchHRProspects(companyDomain, fetchCount = 2) {
     }
 }
 /**
- * Express route handler for HR prospect search
+ * Express route handler for HR prospect search with caching
  */
 export async function handleHRSearch(req, res, next) {
     try {
-        const { company_domain } = req.body;
+        const { company_domain, force_refresh } = req.body;
         if (!company_domain || typeof company_domain !== 'string') {
             res.status(400).json({
                 error: 'invalid_request',
@@ -90,9 +91,57 @@ export async function handleHRSearch(req, res, next) {
             });
             return;
         }
-        const fetchCount = req.body.fetch_count || 2;
+        // Normalize domain
+        const normalizedDomain = company_domain
+            .replace(/^https?:\/\//, '')
+            .replace(/\/$/, '');
+        // Check cache first (unless force_refresh is true)
+        if (!force_refresh) {
+            const { data: cached } = await supabaseAdmin
+                .from('hr_contacts_cache')
+                .select('*')
+                .eq('company_domain', normalizedDomain)
+                .single();
+            if (cached) {
+                // Increment search count
+                await supabaseAdmin
+                    .from('hr_contacts_cache')
+                    .update({
+                    search_count: (cached.search_count || 0) + 1,
+                    updated_at: new Date().toISOString()
+                })
+                    .eq('id', cached.id);
+                res.json({
+                    prospects: cached.prospects,
+                    company_domain: cached.company_domain,
+                    fetch_count: cached.prospects.length,
+                    file_name: `Cached_${cached.company_name || normalizedDomain}`,
+                    timestamp: cached.updated_at,
+                    from_cache: true
+                });
+                return;
+            }
+        }
+        // Fetch fresh data
+        const fetchCount = req.body.fetch_count || 3;
         const result = await searchHRProspects(company_domain, fetchCount);
-        res.json(result);
+        // Save to cache
+        const companyName = result.prospects[0]?.company_name || normalizedDomain;
+        await supabaseAdmin
+            .from('hr_contacts_cache')
+            .upsert({
+            company_domain: normalizedDomain,
+            company_name: companyName,
+            prospects: result.prospects,
+            fetched_by_user_id: req.user?.id || null,
+            search_count: 1
+        }, {
+            onConflict: 'company_domain'
+        });
+        res.json({
+            ...result,
+            from_cache: false
+        });
     }
     catch (error) {
         next(error);

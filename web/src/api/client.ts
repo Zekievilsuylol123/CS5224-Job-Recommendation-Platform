@@ -60,11 +60,38 @@ async function apiFetch<T>(
   });
 
   if (!response.ok) {
-    const payload = await response.json().catch(() => ({}));
-    throw new Error(payload.message ?? 'Request failed');
+    let errorMessage = 'Request failed';
+    try {
+      const payload = await response.json();
+      errorMessage = payload.message ?? payload.error ?? errorMessage;
+    } catch (e) {
+      // If JSON parsing fails, try to get text
+      const text = await response.text().catch(() => '');
+      if (text) {
+        errorMessage = text;
+      } else {
+        errorMessage = `HTTP ${response.status}: ${response.statusText}`;
+      }
+    }
+    throw new Error(errorMessage);
   }
 
-  return response.json() as Promise<T>;
+  // Check if response has content
+  const contentType = response.headers.get('content-type');
+  if (!contentType || !contentType.includes('application/json')) {
+    // If not JSON, return empty object or throw error
+    const text = await response.text();
+    if (!text) {
+      return {} as T;
+    }
+    throw new Error(`Expected JSON response but got: ${contentType}`);
+  }
+
+  try {
+    return await response.json() as T;
+  } catch (error) {
+    throw new Error(`Failed to parse JSON response: ${error instanceof Error ? error.message : 'Unknown error'}`);
+  }
 }
 
 export interface JobsQueryParams {
@@ -80,7 +107,7 @@ export interface JobsQueryParams {
 }
 
 export interface JobsResponse {
-  items: (Job & { score: number; scoreRaw: number; epIndicator: string })[];
+  items: Job[];
   total: number;
   page?: number;
   pageSize?: number;
@@ -299,11 +326,18 @@ export function searchHRContacts(payload: HRSearchPayload): Promise<HRSearchResp
   });
 }
 
+export function getCachedHRContacts(companyDomain: string): Promise<HRSearchResponse> {
+  return apiFetch(`/hr/cache?company_domain=${encodeURIComponent(companyDomain)}`, {
+    method: 'GET'
+  });
+}
+
 // Generate HR outreach message
 export interface OutreachMessagePayload {
-  job_external_id?: string;
+  job_external_id: string;
   job_title: string;
   job_company: string;
+  // job_description is now fetched by backend, no need to pass it
   hr_name: string;
   hr_email?: string;
   hr_job_title?: string;
@@ -374,4 +408,275 @@ export interface ResumeAnalysis {
 
 export function fetchResumeAnalyses(): Promise<{ analyses: ResumeAnalysis[] }> {
   return apiFetch('/resume/analyses', { method: 'GET' });
+}
+
+// ============================================================================
+// KNOWLEDGE BASE API
+// ============================================================================
+
+export type KnowledgeSourceType =
+  | 'resume'
+  | 'linkedin'
+  | 'github'
+  | 'personal_website'
+  | 'project_document'
+  | 'portfolio'
+  | 'other_document'
+  | 'manual_text';
+
+export type ProcessingStatus = 'pending' | 'processing' | 'completed' | 'failed';
+
+export interface KnowledgeSource {
+  id: string;
+  user_id: string;
+  source_type: KnowledgeSourceType;
+  source_identifier?: string;
+  raw_content?: any;
+  parsed_data: any;
+  metadata?: Record<string, any>;
+  processing_status: ProcessingStatus;
+  error_message?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PredictionItem {
+  name: string;
+  confidence: number;
+  reasoning: string;
+}
+
+export interface UserPreferences {
+  id: string;
+  user_id: string;
+  
+  // AI-predicted preferences (JSONB with confidence scores)
+  predicted_industries?: PredictionItem[];
+  predicted_roles?: PredictionItem[];
+  predicted_companies?: PredictionItem[];
+  
+  // User-confirmed preferences (arrays)
+  confirmed_industries?: string[];
+  confirmed_roles?: string[];
+  confirmed_companies?: string[];
+  
+  // Free-form "Other" options
+  other_industries?: string;
+  other_roles?: string;
+  other_companies?: string;
+  
+  // Additional context
+  additional_context?: string;
+  
+  // Metadata
+  prediction_metadata?: {
+    model: string;
+    timestamp: string;
+    knowledge_sources_count: number;
+    [key: string]: any;
+  };
+  last_predicted_at?: string;
+  
+  created_at: string;
+  updated_at: string;
+}
+
+export interface GeneratedMaterial {
+  id: string;
+  user_id: string;
+  job_id: string;
+  material_type: 'resume' | 'cover_letter';
+  content: string;
+  metadata: {
+    word_count: number;
+    generated_at: string;
+    [key: string]: any;
+  };
+  created_at: string;
+}
+
+export interface AggregatedProfile {
+  name?: string;
+  email?: string;
+  phone?: string;
+  location?: string;
+  summary?: string;
+  about?: string;
+  skills: string[];
+  technical_skills: string[];
+  soft_skills: string[];
+  languages: Array<{ language: string; proficiency: string }>;
+  experience: Array<{
+    job_title?: string;
+    title?: string;
+    company: string;
+    location?: string;
+    duration: string;
+    description: string;
+    start_date?: { year: number; month?: string };
+    end_date?: { year: number; month?: string };
+    is_current?: boolean;
+    skills?: string[];
+    source?: string;
+  }>;
+  education: Array<{
+    institution: string;
+    degree: string;
+    field_of_study: string;
+    duration: string;
+    start_date?: { year: number };
+    end_date?: { year: number };
+    gpa?: string;
+    source?: string;
+  }>;
+  certifications: Array<{
+    name: string;
+    issuer: string;
+    issued_date?: string;
+    expiry_date?: string;
+    source?: string;
+  }>;
+  projects: Array<{
+    name: string;
+    description: string;
+    technologies?: string[];
+    url?: string;
+    start_date?: string;
+    end_date?: string;
+    source?: string;
+  }>;
+  interests: string[];
+  publications: string[];
+  awards: string[];
+  linkedin_profile_url?: string;
+  github_username?: string;
+  personal_website_urls: string[];
+  sources: Array<{
+    type: string;
+    identifier?: string;
+    created_at: string;
+  }>;
+  updated_at?: string; // Timestamp of when this profile was last aggregated
+}
+
+// Knowledge Sources
+export function fetchKnowledgeSources(): Promise<{ sources: KnowledgeSource[] }> {
+  return apiFetch('/knowledge-sources', { method: 'GET' });
+}
+
+export function fetchAggregatedProfile(): Promise<{ aggregated_profile: AggregatedProfile | null }> {
+  return apiFetch('/knowledge-sources/aggregate', { method: 'GET' });
+}
+
+export function uploadKnowledgeDocument(file: File): Promise<{ source: KnowledgeSource; message: string }> {
+  const formData = new FormData();
+  formData.append('file', file);
+  return apiFetch('/knowledge-sources/upload', {
+    method: 'POST',
+    body: formData,
+  });
+}
+
+export function uploadProjectDocument(file: File): Promise<{ source: KnowledgeSource; message: string }> {
+  const formData = new FormData();
+  formData.append('file', file);
+  
+  return apiFetch('/knowledge-sources/upload-project', {
+    method: 'POST',
+    body: formData,
+  });
+}
+
+export function addLinkedInProfile(url: string): Promise<{ source: KnowledgeSource; message: string }> {
+  return apiFetch('/knowledge-sources/linkedin', {
+    method: 'POST',
+    body: JSON.stringify({ url }),
+  });
+}
+
+export function addGitHubProfile(url: string): Promise<{ source: KnowledgeSource; message: string }> {
+  return apiFetch('/knowledge-sources/github', {
+    method: 'POST',
+    body: JSON.stringify({ url }),
+  });
+}
+
+export function addWebsite(url: string): Promise<{ source: KnowledgeSource; message: string }> {
+  return apiFetch('/knowledge-sources/website', {
+    method: 'POST',
+    body: JSON.stringify({ url }),
+  });
+}
+
+export function addManualText(content: string): Promise<{ source: KnowledgeSource; message: string }> {
+  return apiFetch('/knowledge-sources/text', {
+    method: 'POST',
+    body: JSON.stringify({ content }),
+  });
+}
+
+export function deleteKnowledgeSource(id: string): Promise<{ message: string }> {
+  return apiFetch(`/knowledge-sources/${id}`, { method: 'DELETE' });
+}
+
+// User Preferences
+export function fetchUserPreferences(): Promise<{ preferences: UserPreferences | null }> {
+  return apiFetch('/preferences', { method: 'GET' });
+}
+
+export function predictPreferences(): Promise<{ preferences: UserPreferences; message: string }> {
+  return apiFetch('/preferences/predict', { method: 'POST' });
+}
+
+export function updateUserPreferences(
+  preferences: Partial<Omit<UserPreferences, 'id' | 'user_id' | 'created_at' | 'updated_at'>>
+): Promise<{ preferences: UserPreferences; message: string }> {
+  return apiFetch('/preferences', {
+    method: 'PUT',
+    body: JSON.stringify(preferences),
+  });
+}
+
+export function deleteUserPreferences(): Promise<{ message: string }> {
+  return apiFetch('/preferences', { method: 'DELETE' });
+}
+
+// Material Generation
+export function generateResume(
+  jobId: string,
+  options?: { tone?: 'formal' | 'professional' | 'enthusiastic' }
+): Promise<{ material: GeneratedMaterial; message: string }> {
+  return apiFetch(`/generate/resume/${jobId}`, {
+    method: 'POST',
+    body: JSON.stringify(options || {}),
+  });
+}
+
+export function generateCoverLetter(
+  jobId: string,
+  options?: { tone?: 'formal' | 'professional' | 'enthusiastic' }
+): Promise<{ material: GeneratedMaterial; message: string }> {
+  return apiFetch(`/generate/cover-letter/${jobId}`, {
+    method: 'POST',
+    body: JSON.stringify(options || {}),
+  });
+}
+
+export function fetchJobMaterials(jobId: string): Promise<{ materials: GeneratedMaterial[] }> {
+  return apiFetch(`/generate/${jobId}/materials`, { method: 'GET' });
+}
+
+export function fetchMaterial(id: string): Promise<{ material: GeneratedMaterial }> {
+  return apiFetch(`/generate/${id}`, { method: 'GET' });
+}
+
+export function updateMaterial(id: string, content: string): Promise<{ material: GeneratedMaterial; message: string }> {
+  return apiFetch(`/generate/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ content }),
+  });
+}
+
+export function deleteMaterial(id: string): Promise<{ message: string }> {
+  return apiFetch(`/generate/${id}`, { method: 'DELETE' });
 }

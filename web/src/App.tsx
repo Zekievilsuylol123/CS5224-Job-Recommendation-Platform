@@ -1,10 +1,13 @@
 import { Link, NavLink, Route, Routes } from 'react-router-dom';
 import { useEffect, useState } from 'react';
+import { Toaster } from 'react-hot-toast';
 import AuthProvider from './components/AuthProvider';
 import ProtectedRoute from './components/ProtectedRoute';
 import LandingPage from './pages/Landing';
 import LoginPage from './pages/Login';
-import SelfAssessmentPage from './pages/SelfAssessment';
+import TermsOfService from './pages/TermsOfService';
+import PrivacyPolicy from './pages/PrivacyPolicy';
+import KnowledgeBasePage from './pages/KnowledgeBase';
 import DashboardPage from './pages/Dashboard';
 import JobsListPage from './pages/JobsList';
 import JobDetailPage from './pages/JobDetail';
@@ -48,18 +51,42 @@ export default function App(): JSX.Element {
 
   return (
     <AuthProvider>
+      <Toaster
+        position="top-right"
+        toastOptions={{
+          duration: 4000,
+          style: {
+            background: '#fff',
+            color: '#0f172a',
+            boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)',
+          },
+          success: {
+            iconTheme: {
+              primary: '#10b981',
+              secondary: '#fff',
+            },
+          },
+          error: {
+            iconTheme: {
+              primary: '#ef4444',
+              secondary: '#fff',
+            },
+          },
+        }}
+      />
       <div className="min-h-screen flex flex-col">
         {user && (
           <header className="border-b bg-white sticky top-0 z-30">
-            <div className="mx-auto flex max-w-6xl items-center justify-between px-4 sm:px-6 py-3 sm:py-4">
+            <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-3 sm:py-4">
               <Link to="/" className="text-lg sm:text-xl font-semibold text-brand-600 flex-shrink-0">
-                EP-Aware Jobs
+                CTO
               </Link>
+              <p className="hidden sm:block text-xs text-slate-500 ml-2">Your Personal Chief Talent Officer</p>
               
               {/* Desktop Navigation */}
               <nav className="hidden md:flex gap-2">
-                <NavLink to="/assessment" className={navLinkClass}>
-                  Self-Assessment
+                <NavLink to="/knowledge-base" className={navLinkClass}>
+                  Knowledge Base
                 </NavLink>
                 {isProfileActivated ? (
                   <>
@@ -75,13 +102,13 @@ export default function App(): JSX.Element {
                   </>
                 ) : (
                   <>
-                    <span data-tour="locked-navigation" className={lockedNavLinkClass()} title="Complete self-assessment first">
+                    <span data-tour="locked-navigation" className={lockedNavLinkClass()} title="Complete onboarding to unlock">
                       Dashboard
                     </span>
-                    <span className={lockedNavLinkClass()} title="Complete self-assessment first">
+                    <span className={lockedNavLinkClass()} title="Complete onboarding to unlock">
                       Jobs
                     </span>
-                    <span className={lockedNavLinkClass()} title="Complete self-assessment first">
+                    <span className={lockedNavLinkClass()} title="Complete onboarding to unlock">
                       Applications
                     </span>
                   </>
@@ -118,7 +145,7 @@ export default function App(): JSX.Element {
               <div className="md:hidden border-t border-slate-200">
                 <div className="space-y-1 px-4 pb-3 pt-2">
                   <NavLink
-                    to="/assessment"
+                    to="/knowledge-base"
                     className={({ isActive }) =>
                       `block px-3 py-2 rounded-md text-base font-medium ${
                         isActive
@@ -128,7 +155,7 @@ export default function App(): JSX.Element {
                     }
                     onClick={() => setMobileMenuOpen(false)}
                   >
-                    Self-Assessment
+                    Knowledge Base
                   </NavLink>
                   {isProfileActivated ? (
                     <>
@@ -198,12 +225,14 @@ export default function App(): JSX.Element {
         <main className="flex-1 bg-slate-50">
           <Routes>
             <Route path="/login" element={<LoginPage />} />
+            <Route path="/terms" element={<TermsOfService />} />
+            <Route path="/privacy" element={<PrivacyPolicy />} />
             <Route path="/" element={<LandingPage />} />
             <Route
-              path="/assessment"
+              path="/knowledge-base"
               element={
                 <ProtectedRoute>
-                  <SelfAssessmentPage />
+                  <KnowledgeBasePage />
                 </ProtectedRoute>
               }
             />
@@ -244,7 +273,7 @@ export default function App(): JSX.Element {
         {user && (
           <footer className="border-t bg-white">
             <div className="mx-auto max-w-6xl px-6 py-4 text-sm text-slate-500">
-              &copy; {new Date().getFullYear()} EP-Aware Jobs. Built for ultra-lean MVP validation.
+              &copy; {new Date().getFullYear()} CTO — Your Personal Chief Talent Officer.
             </div>
           </footer>
         )}

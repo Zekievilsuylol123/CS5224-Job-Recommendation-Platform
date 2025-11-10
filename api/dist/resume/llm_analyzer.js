@@ -1,5 +1,6 @@
 import OpenAI from "openai";
 import fs from "node:fs";
+import path from "node:path";
 import { z } from "zod";
 import { zodTextFormat } from "openai/helpers/zod";
 import { toFile } from "openai/uploads";
@@ -32,7 +33,7 @@ export async function extract_resume_info(resume) {
         file: uploadable,
         purpose: "assistants"
     });
-    const prompt = fs.readFileSync("resources\\llm_prompts\\extract_resume_info.txt", "utf8");
+    const prompt = fs.readFileSync(path.join("resources", "llm_prompts", "extract_resume_info.txt"), "utf8");
     console.log(prompt);
     const res = await client.responses.create({
         model: "gpt-4.1-mini",
@@ -50,5 +51,7 @@ export async function extract_resume_info(resume) {
         },
     });
     console.log(res);
-    return res.output_text;
+    // Parse the JSON string returned by the LLM into an object
+    const parsedProfile = JSON.parse(res.output_text);
+    return parsedProfile;
 }

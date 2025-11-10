@@ -8,6 +8,7 @@ interface ModalProps {
   onClose: () => void;
   children: React.ReactNode;
   footer?: React.ReactNode;
+  fullScreen?: boolean; // Add fullScreen prop
 }
 
 export default function Modal({
@@ -16,7 +17,8 @@ export default function Modal({
   description,
   onClose,
   children,
-  footer
+  footer,
+  fullScreen = false
 }: ModalProps): JSX.Element | null {
   useEffect(() => {
     if (!open) {
@@ -43,7 +45,11 @@ export default function Modal({
       role="dialog"
       aria-modal="true"
     >
-      <div className="max-h-[90vh] w-full max-w-3xl overflow-hidden rounded-2xl bg-white shadow-2xl">
+      <div className={`overflow-hidden rounded-2xl bg-white shadow-2xl ${
+        fullScreen 
+          ? 'max-h-[95vh] w-full max-w-7xl' 
+          : 'max-h-[90vh] w-full max-w-3xl'
+      }`}>
         <div className="flex items-start justify-between border-b border-slate-200 px-6 py-4">
           <div>
             <h2 className="text-lg font-semibold text-slate-900">{title}</h2>

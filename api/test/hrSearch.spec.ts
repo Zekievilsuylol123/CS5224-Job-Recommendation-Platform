@@ -82,7 +82,7 @@ describe('HR Prospect Search', () => {
 
     expect(payload.company_domain).toEqual(['okx.com']);
     expect(payload.fetch_count).toBe(5);
-    expect(payload.contact_job_title).toEqual(['hr', 'human resource', 'talent acquisition', 'recruiter']);
+    expect(payload.contact_job_title).toEqual(['hr', 'human resource', 'talent acquisition', 'recruiter', 'hiring manager']);
     expect(payload.contact_location).toEqual(['singapore']);
   });
 
