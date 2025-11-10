@@ -39,13 +39,11 @@ RUN corepack enable
 
 COPY pnpm-workspace.yaml pnpm-lock.yaml package.json tsconfig.base.json ./
 COPY web/package.json ./web/package.json
-# 安装 web 所需依赖（包含 devDeps：vite、@vitejs/plugin-react 等）
+
 RUN pnpm --filter ./web... install --frozen-lockfile
 
-# 拷完整源码，再 build
 COPY web ./web
 
-# 注入前端需要的 Vite 环境变量（浏览器可见，不是秘密）
 ARG VITE_API_URL
 ARG VITE_SUPABASE_URL
 ENV VITE_API_URL=$VITE_API_URL
