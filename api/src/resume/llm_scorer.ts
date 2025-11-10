@@ -6,7 +6,7 @@ import { resourcePath } from "../utils/resourcePath.js";
 import { z } from "zod";
 import { zodTextFormat } from "openai/helpers/zod";
 import { toFile } from "openai/uploads";
-import { RoleTemplate } from "src/seedJobs";
+import { RoleTemplate } from "../seedJobs.js";
 
 const client = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,

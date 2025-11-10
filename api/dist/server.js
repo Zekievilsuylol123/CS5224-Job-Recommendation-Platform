@@ -14,7 +14,7 @@ import { isAllowedResumeMime } from './resume/analyzer.js';
 import { extract_resume_info } from './resume/llm_analyzer.js';
 import { scoreCompass } from './scoreCompass.js';
 import { scoreCompassWithLLM } from './llm_compass_scorer.js';
-import { handleHRSearch } from './hrSearch.js';
+import { handleHRSearch, handleGetCachedHRContacts } from './hrSearch.js';
 import { handleGenerateOutreach } from './hrOutreach.js';
 import { requireAuth, optionalAuth } from './middleware/auth.js';
 import { supabaseAdmin } from './supabase.js';
@@ -358,6 +358,7 @@ export async function buildServer() {
             });
             // Get user profile for scoring if authenticated
             let userProfile = null;
+            let userPreferences = null;
             if (req.user) {
                 const { data } = await supabaseAdmin
                     .from('profiles')
@@ -377,32 +378,57 @@ export async function buildServer() {
                         plan: data.plan || 'freemium'
                     };
                 }
+                // Fetch user preferences for smart sorting
+                const { data: prefsData } = await supabaseAdmin
+                    .from('user_preferences')
+                    .select('confirmed_industries, confirmed_roles, confirmed_companies')
+                    .eq('user_id', req.user.id)
+                    .single();
+                if (prefsData) {
+                    userPreferences = prefsData;
+                }
             }
-            // Calculate compass scores for each job
-            const withScores = filtered.map(job => {
-                const score = scoreCompass({
-                    user: userProfile || {},
-                    job: {
-                        title: job.title,
-                        company: job.company,
-                        location: job.location,
-                        industry: job.industry,
-                        requirements: job.tags
+            // Map jobs to include requirements field (for frontend compatibility)
+            const mappedJobs = filtered.map(job => ({
+                ...job,
+                requirements: job.tags, // Map tags to requirements for frontend
+            }));
+            // Sort by preference matches if user has preferences
+            let sortedJobs = mappedJobs;
+            if (userPreferences && (userPreferences.confirmed_industries?.length || userPreferences.confirmed_roles?.length || userPreferences.confirmed_companies?.length)) {
+                const roles = userPreferences.confirmed_roles || [];
+                const companies = userPreferences.confirmed_companies || [];
+                const industries = userPreferences.confirmed_industries || [];
+                sortedJobs = mappedJobs.map(job => {
+                    let matchCount = 0;
+                    // Check title matches role
+                    if (roles.some(role => role.toLowerCase().includes(job.title.toLowerCase()) ||
+                        job.title.toLowerCase().includes(role.toLowerCase()))) {
+                        matchCount++;
                     }
-                });
-                return {
-                    ...job,
-                    requirements: job.tags, // Map tags to requirements for frontend
-                    score: score.total,
-                    scoreRaw: score.totalRaw,
-                    epIndicator: score.verdict
-                };
-            }).sort((a, b) => b.score - a.score); // Sort by COMPASS score descending
+                    // Check company matches
+                    if (companies.some(comp => comp.toLowerCase().includes(job.company.toLowerCase()) ||
+                        job.company.toLowerCase().includes(comp.toLowerCase()))) {
+                        matchCount++;
+                    }
+                    // Check tags/requirements match industry
+                    if (industries.some(industry => (job.tags || []).some(tag => industry.toLowerCase().includes(tag.toLowerCase()) ||
+                        tag.toLowerCase().includes(industry.toLowerCase())))) {
+                        matchCount++;
+                    }
+                    // Check job industry matches
+                    if (industries.some(industry => industry.toLowerCase().includes(job.industry.toLowerCase()) ||
+                        job.industry.toLowerCase().includes(industry.toLowerCase()))) {
+                        matchCount++;
+                    }
+                    return { ...job, matchCount };
+                }).sort((a, b) => b.matchCount - a.matchCount);
+            }
             // Apply pagination
-            const total = withScores.length;
+            const total = sortedJobs.length;
             const startIndex = (page - 1) * pageSize;
             const endIndex = startIndex + pageSize;
-            const paginatedItems = withScores.slice(startIndex, endIndex);
+            const paginatedItems = sortedJobs.slice(startIndex, endIndex);
             res.json({
                 items: paginatedItems,
                 total,
@@ -560,29 +586,27 @@ export async function buildServer() {
                 res.status(404).json({ error: 'not_found', message: 'Job not found' });
                 return;
             }
-            // Get the most recent resume analysis to get detailed resume data
-            const { data: resumeAnalysis } = await supabaseAdmin
-                .from('resume_analyses')
-                .select('id, parsed_data')
-                .eq('user_id', req.user.id)
-                .order('created_at', { ascending: false })
-                .limit(1)
+            // Get the unified knowledge base summary from profiles table
+            const { data: profileData, error: profileError } = await supabaseAdmin
+                .from('profiles')
+                .select('knowledge_base_summary, knowledge_base_updated_at')
+                .eq('id', req.user.id)
                 .single();
-            if (!resumeAnalysis) {
+            if (profileError || !profileData || !profileData.knowledge_base_summary) {
                 res.status(400).json({
-                    error: 'missing_resume',
-                    message: 'Please upload your resume first to get a detailed analysis'
+                    error: 'missing_profile',
+                    message: 'Please upload your resume or connect LinkedIn first to get a detailed analysis'
                 });
                 return;
             }
-            // Check if we have an existing assessment for this job with this resume
+            const knowledgeBase = profileData.knowledge_base_summary;
+            // Check if we have an existing assessment for this job with this knowledge base version
             if (!regenerate) {
                 const { data: existingAssessment } = await supabaseAdmin
                     .from('job_assessments')
                     .select('*')
                     .eq('user_id', req.user.id)
                     .eq('job_external_id', req.params.id)
-                    .eq('resume_analysis_id', resumeAnalysis.id)
                     .order('created_at', { ascending: false })
                     .limit(1)
                     .single();
@@ -623,22 +647,27 @@ export async function buildServer() {
             user_prompt = user_prompt.replace("{{ base_salary }}", roleTemplate.baseSalary[0] + " - " + roleTemplate.baseSalary[1]);
             user_prompt = user_prompt.replace("{{ job_requirements }}", roleTemplate.requirements.join("\n"));
             user_prompt = user_prompt.replace("{{ job_description }}", roleTemplate.description);
-            // Add candidate profile from stored resume analysis
-            const resumeData = resumeAnalysis.parsed_data;
-            user_prompt += "\n\n# CANDIDATE RESUME DATA\n\n";
-            user_prompt += `Name: ${resumeData.name}\n`;
-            user_prompt += `Email: ${resumeData.email}\n`;
-            if (resumeData.education) {
-                user_prompt += `\nEducation:\n${resumeData.education.map((e) => `- ${e.degree || 'Degree'} at ${e.institution} (${e.start_date} - ${e.end_date})`).join('\n')}\n`;
+            // Add candidate profile from unified knowledge base
+            user_prompt += "\n\n# CANDIDATE PROFILE DATA\n\n";
+            user_prompt += `Name: ${knowledgeBase.name}\n`;
+            user_prompt += `Email: ${knowledgeBase.email}\n`;
+            if (knowledgeBase.phone) {
+                user_prompt += `Phone: ${knowledgeBase.phone}\n`;
             }
-            if (resumeData.experience) {
-                user_prompt += `\nWork Experience:\n${resumeData.experience.map((e) => `- ${e.job_title} at ${e.company} (${e.start_date} - ${e.end_date || 'Present'})\n  ${e.responsibilities?.join('\n  ') || ''}`).join('\n\n')}\n`;
+            if (knowledgeBase.education) {
+                user_prompt += `\nEducation:\n${knowledgeBase.education.map((e) => `- ${e.degree || 'Degree'} at ${e.institution} (${e.duration || ''})`).join('\n')}\n`;
             }
-            if (resumeData.skills) {
-                user_prompt += `\nSkills: ${resumeData.skills.join(', ')}\n`;
+            if (knowledgeBase.experience) {
+                user_prompt += `\nWork Experience:\n${knowledgeBase.experience.map((e) => `- ${e.job_title} at ${e.company} (${e.duration})\n  ${e.description || ''}`).join('\n\n')}\n`;
             }
-            if (resumeData.certifications) {
-                user_prompt += `\nCertifications: ${resumeData.certifications.join(', ')}\n`;
+            if (knowledgeBase.skills) {
+                user_prompt += `\nSkills: ${knowledgeBase.skills.join(', ')}\n`;
+            }
+            if (knowledgeBase.certifications && knowledgeBase.certifications.length > 0) {
+                user_prompt += `\nCertifications: ${knowledgeBase.certifications.map((c) => c.name || c).join(', ')}\n`;
+            }
+            if (knowledgeBase.projects && knowledgeBase.projects.length > 0) {
+                user_prompt += `\nProjects:\n${knowledgeBase.projects.map((p) => `- ${p.name}: ${p.description}`).join('\n')}\n`;
             }
             // Import ProfileSchema from llm_scorer
             const { ProfileSchema } = await import('./resume/llm_scorer.js');
@@ -663,14 +692,14 @@ export async function buildServer() {
             // Also calculate COMPASS score with the detailed JD using LLM
             const userProfile = {
                 id: req.user.id,
-                name: resumeData.name || 'Candidate',
-                educationLevel: resumeData.education?.[0]?.degree?.includes('Master') ? 'Masters' :
-                    resumeData.education?.[0]?.degree?.includes('PhD') ? 'PhD' :
-                        resumeData.education?.[0]?.degree?.includes('Bachelor') ? 'Bachelors' : 'Diploma',
-                educationInstitution: resumeData.education?.[0]?.institution,
-                certifications: resumeData.certifications,
-                yearsExperience: resumeData.experience?.length || 0,
-                skills: resumeData.skills || [],
+                name: knowledgeBase.name || 'Candidate',
+                educationLevel: knowledgeBase.education?.[0]?.degree?.includes('Master') ? 'Masters' :
+                    knowledgeBase.education?.[0]?.degree?.includes('PhD') ? 'PhD' :
+                        knowledgeBase.education?.[0]?.degree?.includes('Bachelor') ? 'Bachelors' : 'Diploma',
+                educationInstitution: knowledgeBase.education?.[0]?.institution,
+                certifications: knowledgeBase.certifications?.map((c) => c.name || c),
+                yearsExperience: knowledgeBase.experience?.length || 0,
+                skills: knowledgeBase.skills || [],
                 expectedSalarySGD: undefined,
                 plan: 'freemium'
             };
@@ -685,7 +714,7 @@ export async function buildServer() {
                     description: roleTemplate.description
                 }
             });
-            // Save to database
+            // Save to database (without resume_analysis_id since we're using knowledge_base_summary)
             const { data: savedAssessment, error: saveError } = await supabaseAdmin
                 .from('job_assessments')
                 .upsert({
@@ -693,7 +722,7 @@ export async function buildServer() {
                 job_external_id: req.params.id,
                 job_title: job.title,
                 job_company: job.company,
-                resume_analysis_id: resumeAnalysis.id,
+                resume_analysis_id: null, // No longer tied to specific resume analysis
                 candidate_name: assessment.candidate_name,
                 candidate_email: assessment.candidate_email,
                 role_title: assessment.role_title,
@@ -708,7 +737,7 @@ export async function buildServer() {
                 notes: assessment.notes,
                 compass_score: compassScore // Store the recalculated COMPASS score
             }, {
-                onConflict: 'user_id,job_external_id,resume_analysis_id'
+                onConflict: 'user_id,job_external_id'
             })
                 .select()
                 .single();
@@ -977,9 +1006,19 @@ export async function buildServer() {
                 name: llmProfile.name,
                 email: llmProfile.email,
                 skills: llmProfile.skills || [],
-                educationLevel: inferEducationLevel(llmProfile.education),
+                educationLevel: inferEducationLevel((llmProfile.education ?? []).map(e => ({
+                    degree: e.degree ?? "",
+                    institution: e.institution ?? "",
+                    field_of_study: e.field_of_study ?? "",
+                    duration: e.duration ?? ""
+                }))),
                 educationInstitution: llmProfile.education?.[0]?.institution, // Get first/highest institution
-                yearsExperience: inferYearsExperience(llmProfile.experience),
+                yearsExperience: inferYearsExperience((llmProfile.experience ?? []).map(e => ({
+                    job_title: e.job_title ?? "",
+                    company: e.company ?? "",
+                    duration: e.duration ?? "",
+                    description: e.description ?? ""
+                }))),
                 lastTitle: llmProfile.experience?.[0]?.job_title,
                 nationality: undefined, // Not extracted by LLM
                 gender: undefined // Not extracted by LLM
@@ -1007,6 +1046,8 @@ export async function buildServer() {
         }
     });
     router.post('/hr/search', handleHRSearch);
+    // Get cached HR contacts (no external API call)
+    router.get('/hr/cache', handleGetCachedHRContacts);
     // Generate HR outreach message
     router.post('/hr/outreach/generate', requireAuth, handleGenerateOutreach);
     // Knowledge base routes

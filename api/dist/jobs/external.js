@@ -19,7 +19,7 @@ export async function fetchExternalJobs() {
         if (!response.ok) {
             throw new Error(`Failed to fetch jobs: ${response.statusText}`);
         }
-        const jobs = await response.json();
+        const jobs = (await response.json());
         // Normalize the job data
         cachedJobs = jobs.map((job, index) => {
             // Generate stable ID based on company, date, and index
@@ -29,6 +29,61 @@ export async function fetchExternalJobs() {
             // Enhance tags based on job title
             const enhancedTags = [...(job.g || [])];
             const titleLower = job.t.toLowerCase();
+            // Add Technology/Tech-related tags based on title keywords
+            if (titleLower.includes('software') ||
+                titleLower.includes('developer') ||
+                titleLower.includes('engineer') ||
+                titleLower.includes('programmer') ||
+                titleLower.includes('tech') ||
+                titleLower.includes('data') ||
+                titleLower.includes('analyst') ||
+                titleLower.includes('devops') ||
+                titleLower.includes('cloud') ||
+                titleLower.includes('frontend') ||
+                titleLower.includes('backend') ||
+                titleLower.includes('fullstack') ||
+                titleLower.includes('full stack') ||
+                titleLower.includes('ai') ||
+                titleLower.includes('ml') ||
+                titleLower.includes('machine learning') ||
+                titleLower.includes('product manager') ||
+                titleLower.includes('scrum') ||
+                titleLower.includes('agile')) {
+                if (!enhancedTags.some(tag => tag.toLowerCase() === 'technology')) {
+                    enhancedTags.push('Technology');
+                }
+                if (!enhancedTags.some(tag => tag.toLowerCase() === 'tech')) {
+                    enhancedTags.push('Tech');
+                }
+            }
+            // Add AI/ML tag
+            if (titleLower.includes('ai') ||
+                titleLower.includes('ml') ||
+                titleLower.includes('machine learning') ||
+                titleLower.includes('artificial intelligence') ||
+                titleLower.includes('deep learning') ||
+                titleLower.includes('neural network') ||
+                titleLower.includes('computer vision') ||
+                titleLower.includes('nlp') ||
+                titleLower.includes('natural language')) {
+                if (!enhancedTags.some(tag => tag.toLowerCase() === 'ai/ml')) {
+                    enhancedTags.push('AI/ML');
+                }
+            }
+            // Add Data Analytics tag
+            if (titleLower.includes('data') ||
+                titleLower.includes('analyst') ||
+                titleLower.includes('analytics') ||
+                titleLower.includes('business intelligence') ||
+                titleLower.includes('bi ') ||
+                titleLower.includes('dashboard') ||
+                titleLower.includes('visualization') ||
+                titleLower.includes('tableau') ||
+                titleLower.includes('power bi')) {
+                if (!enhancedTags.some(tag => tag.toLowerCase() === 'data analytics')) {
+                    enhancedTags.push('Data Analytics');
+                }
+            }
             // Add Marketing tag if title contains marketing-related keywords
             if (titleLower.includes('marketing') ||
                 titleLower.includes('brand') ||
@@ -39,6 +94,17 @@ export async function fetchExternalJobs() {
                 titleLower.includes('sem')) {
                 if (!enhancedTags.includes('Marketing')) {
                     enhancedTags.push('Marketing');
+                }
+            }
+            // Add Finance tag
+            if (titleLower.includes('finance') ||
+                titleLower.includes('accounting') ||
+                titleLower.includes('audit') ||
+                titleLower.includes('financial') ||
+                titleLower.includes('investment') ||
+                titleLower.includes('banking')) {
+                if (!enhancedTags.includes('Finance')) {
+                    enhancedTags.push('Finance');
                 }
             }
             // Add "Others" tag if no specific category tags exist

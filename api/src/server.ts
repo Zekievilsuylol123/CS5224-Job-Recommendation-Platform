@@ -1153,9 +1153,23 @@ export async function buildServer(): Promise<express.Express> {
           name: llmProfile.name,
           email: llmProfile.email,
           skills: llmProfile.skills || [],
-          educationLevel: inferEducationLevel(llmProfile.education),
+          educationLevel: inferEducationLevel(
+              (llmProfile.education ?? []).map(e => ({
+                degree: e.degree ?? "",
+                institution: e.institution ?? "",
+                field_of_study: e.field_of_study ?? "",
+                duration: e.duration ?? ""
+              }))
+            ),
           educationInstitution: llmProfile.education?.[0]?.institution, // Get first/highest institution
-          yearsExperience: inferYearsExperience(llmProfile.experience),
+          yearsExperience: inferYearsExperience(
+            (llmProfile.experience ?? []).map(e => ({
+              job_title: e.job_title ?? "",
+              company: e.company ?? "",
+              duration: e.duration ?? "",
+              description: e.description ?? ""
+            }))
+          ),
           lastTitle: llmProfile.experience?.[0]?.job_title,
           nationality: undefined, // Not extracted by LLM
           gender: undefined // Not extracted by LLM

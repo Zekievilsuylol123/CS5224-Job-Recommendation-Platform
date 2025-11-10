@@ -78,7 +78,7 @@ export async function fetchJobDescription(jobUrl, company) {
             logger.warn({ status: response.status, company, jobUrl }, 'Failed to fetch JD from webhook');
             return null;
         }
-        const data = await response.json();
+        const data = (await response.json());
         if (!data || data.length === 0) {
             logger.warn({ company, jobUrl }, 'No JD data returned from webhook');
             return null;

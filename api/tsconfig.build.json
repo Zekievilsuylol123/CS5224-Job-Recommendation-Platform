@@ -3,7 +3,10 @@
   "compilerOptions": {
     "noEmit": false,
     "outDir": "dist",
-    "rootDir": "src"
+    "rootDir": "src",
+    "strict": false,
+    "noImplicitAny": false,
+    "skipLibCheck": true
   },
   "exclude": [
     "test",

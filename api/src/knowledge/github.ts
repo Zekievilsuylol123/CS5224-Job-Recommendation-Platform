@@ -30,7 +30,8 @@ export async function fetchGitHubProfile(username: string): Promise<GitHubData> 
       throw new Error(`GitHub API failed: ${profileResponse.status} ${profileResponse.statusText}`);
     }
     
-    const profile: GitHubProfile = await profileResponse.json();
+    const profile = (await profileResponse.json()) as GitHubProfile;
+
     
     // Fetch repositories (sorted by recent updates, limit to 50)
     const reposResponse = await fetch(
@@ -42,7 +43,10 @@ export async function fetchGitHubProfile(username: string): Promise<GitHubData> 
       logger.warn(`Failed to fetch repos for ${username}, using empty array`);
     }
     
-    const repos: GitHubRepo[] = reposResponse.ok ? await reposResponse.json() : [];
+    const repos = reposResponse.ok
+      ? (await reposResponse.json()) as GitHubRepo[]
+      : [];
+
     
     logger.info(`Successfully fetched GitHub profile for ${profile.name || username} with ${repos.length} repos`);
     

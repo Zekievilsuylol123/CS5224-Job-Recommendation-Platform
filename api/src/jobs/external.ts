@@ -45,7 +45,8 @@ export async function fetchExternalJobs(): Promise<NormalizedJob[]> {
       throw new Error(`Failed to fetch jobs: ${response.statusText}`);
     }
     
-    const jobs: ExternalJob[] = await response.json();
+    const jobs = (await response.json()) as ExternalJob[];
+
     
     // Normalize the job data
     cachedJobs = jobs.map((job, index) => {

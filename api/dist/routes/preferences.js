@@ -5,7 +5,7 @@ import { requireAuth } from '../middleware/auth.js';
 import { logger } from '../logger.js';
 import { supabaseAdmin } from '../supabase.js';
 import { predictPreferences } from '../ai/preference_predictor.js';
-import { aggregateKnowledgeBase } from '../knowledge/aggregator.js';
+import { getAggregatedKnowledgeBase } from '../knowledge/aggregator.js';
 const router = express.Router();
 // ============================================================================
 // SCHEMAS
@@ -54,8 +54,14 @@ router.post('/predict', requireAuth, async (req, res) => {
     try {
         const userId = req.user.id;
         logger.info(`Predicting preferences for user ${userId}`);
-        // Get aggregated knowledge base
-        const knowledgeBase = await aggregateKnowledgeBase(userId);
+        // Get cached aggregated knowledge base from profiles table
+        const knowledgeBase = await getAggregatedKnowledgeBase(userId);
+        if (!knowledgeBase) {
+            return res.status(400).json({
+                error: 'No profile found',
+                message: 'Please add at least one knowledge source before predicting preferences',
+            });
+        }
         if (!knowledgeBase.summary && (!knowledgeBase.skills || knowledgeBase.skills.length === 0)) {
             return res.status(400).json({
                 error: 'Insufficient knowledge base',

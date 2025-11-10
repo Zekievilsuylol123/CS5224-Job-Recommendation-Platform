@@ -6,4 +6,27 @@ docker-compose.yml
 .env
 dist
 build
+api/node_modules
+web/node_modules
+# node & editor
+node_modules
+pnpm-debug.log
+npm-debug.log
+.git
+.gitignore
+.DS_Store
 
+# build outputs
+**/dist
+**/.vite
+**/coverage
+node_modules
+**/node_modules
+.git
+.gitignore
+Dockerfile
+dockerfile
+dist
+.vscode
+.idea
+*.log

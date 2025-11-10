@@ -107,7 +107,8 @@ export async function fetchJobDescription(jobUrl: string, company: string): Prom
       return null;
     }
     
-    const data: JDWebhookResponse[] = await response.json();
+    const data = (await response.json()) as JDWebhookResponse[];
+
     
     if (!data || data.length === 0) {
       logger.warn({ company, jobUrl }, 'No JD data returned from webhook');
