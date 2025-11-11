@@ -1,29 +1,35 @@
-version: '3.9'
-
 services:
   api:
     build:
       context: .
       dockerfile: api/Dockerfile
     env_file:
-      - api/.env.example
+      - .env   
     environment:
       NODE_ENV: production
-      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      OPENAI_API_KEY: ${OPENAI_API_KEY}  
       SUPABASE_URL: ${SUPABASE_URL}
       SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY}
     ports:
       - '8080:8080'
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/api/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
 
   web:
     build:
       context: .
       dockerfile: web/Dockerfile
       args:
-        VITE_API_URL: "http://localhost:8080/api"
+        VITE_API_URL: "/api"
         VITE_SUPABASE_URL: ${VITE_SUPABASE_URL}
         VITE_SUPABASE_ANON_KEY: ${VITE_SUPABASE_ANON_KEY}
     depends_on:
-      - api
+      api:
+        condition: service_healthy  
     ports:
-      - '5173:80'
+      - '5173:80'  
+    env_file:
+      - .env

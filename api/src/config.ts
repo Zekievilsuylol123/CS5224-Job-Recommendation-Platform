@@ -14,6 +14,8 @@ const configSchema = z.object({
 });
 
 const parsed = configSchema.parse(process.env);
+const supabaseEnabled =
+  Boolean(parsed.SUPABASE_URL) && Boolean(parsed.SUPABASE_SECRET_KEY);
 
 export const config = {
   port: parsed.PORT,
@@ -21,6 +23,9 @@ export const config = {
   allowFileStore: parsed.ALLOW_FILE_STORE ?? false,
   seedJobsCount: parsed.SEED_JOBS_COUNT,
   uploadMaxMb: parsed.UPLOAD_MAX_MB,
+  
+  supabaseEnabled,
+
   supabaseUrl: parsed.SUPABASE_URL,
   supabaseSecretKey: parsed.SUPABASE_SECRET_KEY
 };
