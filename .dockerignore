@@ -1,32 +1,20 @@
-node_modules
+# 忽略 Git、本地编辑器等
 .git
 .gitignore
-Dockerfile
-docker-compose.yml
-.env
-dist
-build
-api/node_modules
-web/node_modules
-# node & editor
-node_modules
-pnpm-debug.log
-npm-debug.log
-.git
-.gitignore
-.DS_Store
-
-# build outputs
-**/dist
-**/.vite
-**/coverage
-node_modules
-**/node_modules
-.git
-.gitignore
-Dockerfile
-dockerfile
-dist
 .vscode
 .idea
+.DS_Store
+
+# 忽略日志
 *.log
+pnpm-debug.log
+npm-debug.log
+
+# 忽略 node_modules（但保留源代码）
+**/node_modules
+
+# 忽略构建产物目录
+**/dist
+**/build
+**/.vite
+**/coverage

@@ -1,31 +1,23 @@
-# ---------- deps ----------
-FROM node:20-alpine AS deps
-WORKDIR /app
-RUN corepack enable && apk add --no-cache libc6-compat
-
-COPY pnpm-workspace.yaml pnpm-lock.yaml package.json tsconfig.base.json ./
-COPY api/package.json ./api/package.json
-
-RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store pnpm -w install --frozen-lockfile
-
 # ---------- build ----------
-FROM deps AS build
+FROM node:20-alpine AS build
 WORKDIR /app
+RUN corepack enable
 
-COPY api ./api
-COPY api/resources ./api/resources
+COPY api ./    
+COPY tsconfig.base.json /tsconfig.base.json
 
-RUN pnpm -C api run build
+RUN if [ -f pnpm-lock.yaml ]; then \
+      pnpm install --frozen-lockfile; \
+    else \
+      pnpm install; \
+    fi
+
+RUN pnpm build
 
 # ---------- runtime ----------
-FROM node:20-alpine AS prod
-WORKDIR /app/api
+FROM node:20-alpine
+WORKDIR /app
 ENV NODE_ENV=production
-
-COPY --from=deps /app/node_modules /app/node_modules
-COPY api/package.json ./package.json
-COPY --from=build /app/api/dist ./dist
-COPY api/resources ./resources
-
+COPY --from=build /app ./
 EXPOSE 8080
-CMD ["node", "dist/index.js"]
+CMD ["node", "dist/server.js"]

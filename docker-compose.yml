@@ -2,16 +2,17 @@ services:
   api:
     build:
       context: .
+    #   ^^^^^^ 仓库根，下面会指定具体 Dockerfile
       dockerfile: api/Dockerfile
     env_file:
-      - .env   
+      - .env
     environment:
       NODE_ENV: production
-      OPENAI_API_KEY: ${OPENAI_API_KEY}  
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
       SUPABASE_URL: ${SUPABASE_URL}
-      SUPABASE_SECRET_KEY: ${SUPABASE_SECRET_KEY}
+      SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY}
     ports:
-      - '8080:8080'
+      - "8080:8080"
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:8080/api/health"]
       interval: 10s
@@ -23,17 +24,11 @@ services:
       context: .
       dockerfile: web/Dockerfile
       args:
-        VITE_API_URL: "/api"
+        VITE_API_URL: "/api"                 # 生产用同域反代
         VITE_SUPABASE_URL: ${VITE_SUPABASE_URL}
         VITE_SUPABASE_ANON_KEY: ${VITE_SUPABASE_ANON_KEY}
     depends_on:
       api:
-        condition: service_healthy  
+        condition: service_healthy
     ports:
-      - '5173:80'  
-    env_file:
-      - .env
-    environment:
-      VITE_SUPABASE_URL: ${VITE_SUPABASE_URL}
-      VITE_SUPABASE_ANON_KEY: ${VITE_SUPABASE_ANON_KEY}
-      VITE_API_URL: ${VITE_API_URL}
+      - "5173:80"
